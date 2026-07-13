@@ -279,6 +279,14 @@ const SUPABASE_ANON_KEY = 'sb_publishable_XYTwnqgd3ol9VmYaUrSzzg_uMUqsnyn';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ============================================================
+   KART KESİNTİ FORMÜLLERİ — orijinal Excel'den birebir alındı
+   ============================================================ */
+// Vakıfbank: net = tutar - tutar*1.57%
+function vakifNet(tutar){ return tutar - tutar*0.0157; }
+// Yapı Kredi (YKB): net = -(tutar - (tutar*97.01% + tutar*99.85%))  [Excel formülü birebir]
+function ykbNet(tutar){ return -(tutar - ((tutar*0.9701) + (tutar*0.9985))); }
+
+/* ============================================================
    CONFIG — bölüm/ödeme yöntemi tanımları (spreadsheet'ten birebir)
    ============================================================ */
 // islem_tipi: 'satis' | 'tahsilat' | 'odeme'
@@ -288,8 +296,8 @@ const SECTIONS = {
     kodLabel: 'Stok Kodu', adLabel: 'Stok Adı',
     methods: [
       { key: 'nakit',        label: 'Nakit Satış',                  hesabaGecen: false },
-      { key: 'vakif_kredi',  label: 'Vakıfbank Kredi Kartı Satış',  hesabaGecen: true  },
-      { key: 'ykb_kredi',    label: 'Yapı Kredi Kart Satış',        hesabaGecen: true  },
+      { key: 'vakif_kredi',  label: 'Vakıfbank Kredi Kartı Satış',  hesabaGecen: true, commission: vakifNet, commissionLabel: '%1.57 komisyon' },
+      { key: 'ykb_kredi',    label: 'Yapı Kredi Kart Satış',        hesabaGecen: true, commission: ykbNet,   commissionLabel: '%3.14 komisyon' },
       { key: 'mailorder',    label: 'Mail Order Satış',             hesabaGecen: false },
       { key: 'vakif_havale', label: 'Vakıfbank Havale Satış',       hesabaGecen: false },
       { key: 'ykb_havale',   label: 'YKB Havale Satış',             hesabaGecen: false },
@@ -300,8 +308,8 @@ const SECTIONS = {
     kodLabel: 'Cari Kodu', adLabel: 'Cari Adı',
     methods: [
       { key: 'nakit',        label: 'Nakit Tahsilat',                    hesabaGecen: false },
-      { key: 'vakif_kredi',  label: 'Vakıfbank Kredi Kartı Tahsilat',   hesabaGecen: true  },
-      { key: 'ykb_kredi',    label: 'Yapı Kredi Kart Tahsilat',         hesabaGecen: true  },
+      { key: 'vakif_kredi',  label: 'Vakıfbank Kredi Kartı Tahsilat',   hesabaGecen: true, commission: vakifNet, commissionLabel: '%1.57 komisyon' },
+      { key: 'ykb_kredi',    label: 'Yapı Kredi Kart Tahsilat',         hesabaGecen: true, commission: ykbNet,   commissionLabel: '%3.14 komisyon' },
       { key: 'mailorder',    label: 'Mail Order Tahsilat',              hesabaGecen: false },
       { key: 'vakif_havale', label: 'Vakıfbank Havale Tahsilat',        hesabaGecen: false },
       { key: 'ykb_havale',   label: 'YKB Havale Tahsilat',              hesabaGecen: false },
@@ -470,7 +478,10 @@ function renderCard(tip, method){
 
   const head = document.createElement('div');
   head.className = 'card-head';
-  head.innerHTML = `<h3>${method.label}</h3><span class="toplam">Toplam: <b id="total-${tip}-${method.key}">${fmt(total)}</b></span>`;
+  const titleHtml = method.commissionLabel
+    ? `<h3>${method.label} <span style="font-weight:500;color:var(--ink-dim);font-size:11px;">(${method.commissionLabel}, otomatik)</span></h3>`
+    : `<h3>${method.label}</h3>`;
+  head.innerHTML = `${titleHtml}<span class="toplam">Toplam: <b id="total-${tip}-${method.key}">${fmt(total)}</b></span>`;
   card.appendChild(head);
 
   const body = document.createElement('div');
@@ -493,7 +504,7 @@ function renderCard(tip, method){
         <td><input type="text" value="${escapeAttr(row.kod)}" oninput="updateCell('${tip}','${method.key}',${idx},'kod',this.value)"></td>
         <td><input type="text" value="${escapeAttr(row.ad)}" oninput="updateCell('${tip}','${method.key}',${idx},'ad',this.value)"></td>
         <td class="tutar-col"><input type="number" step="0.01" value="${row.tutar}" oninput="updateCell('${tip}','${method.key}',${idx},'tutar',this.value)"></td>
-        ${method.hesabaGecen ? `<td class="tutar-col"><input type="number" step="0.01" value="${row.hesaba_gecen ?? 0}" oninput="updateCell('${tip}','${method.key}',${idx},'hesaba_gecen',this.value)"></td>` : ''}
+        ${method.hesabaGecen ? `<td class="tutar-col"><span id="hg-${tip}-${method.key}-${idx}" style="color:var(--ink-dim);font-variant-numeric:tabular-nums;">${fmt(row.hesaba_gecen ?? 0)}</span></td>` : ''}
         <td class="action-col"><button class="icon-btn" onclick="removeRow('${tip}','${method.key}',${idx})">✕</button></td>
       `;
       tbody.appendChild(tr);
@@ -520,10 +531,22 @@ function removeRow(tip, key, idx){
   state[tip][key].splice(idx,1);
   render();
 }
+function findMethod(tip, key){
+  return SECTIONS[tip].methods.find(m => m.key === key);
+}
+
 function updateCell(tip, key, idx, field, value){
   const row = state[tip][key][idx];
   if (field === 'kod' || field === 'ad') row[field] = value;
   else row[field] = value === '' ? 0 : Number(value);
+
+  const method = findMethod(tip, key);
+  if (field === 'tutar' && method && method.commission){
+    row.hesaba_gecen = method.commission(Number(row.tutar)||0);
+    const hgEl = document.getElementById(`hg-${tip}-${key}-${idx}`);
+    if (hgEl) hgEl.textContent = fmt(row.hesaba_gecen);
+  }
+
   // live update totals in place — do NOT re-render the form (would steal input focus)
   updateCardTotal(tip, key);
   renderSummary();
@@ -562,13 +585,22 @@ function computeSummary(){
   const kasaMevcut = s.kasa_mevcut === '' ? null : Number(s.kasa_mevcut);
   const fark = kasaMevcut === null ? null : (kasaMevcut - nakitDurum);
 
-  // ---- KREDİ KASA (kredi kartı satışları, net hesaba geçen üzerinden) ----
-  const vakifKrediSatis = sumHesabaGecen('satis','vakif_kredi');
-  const ykbKrediSatis = sumHesabaGecen('satis','ykb_kredi');
-  const toplamKrediliSatis = vakifKrediSatis + ykbKrediSatis;
+  // ---- KREDİ KASA (kart satış + tahsilat, komisyon düşülmüş net tutar) ----
+  // Excel'deki Q14/Q15 formülü satış VE tahsilat kart tutarlarını birlikte toplar.
+  const vakifKrediSatisNet = sumHesabaGecen('satis','vakif_kredi');
+  const vakifKrediTahsilatNet = sumHesabaGecen('tahsilat','vakif_kredi');
+  const vakifbankToplamSatis = vakifKrediSatisNet + vakifKrediTahsilatNet;
+
+  const ykbKrediSatisNet = sumHesabaGecen('satis','ykb_kredi');
+  const ykbKrediTahsilatNet = sumHesabaGecen('tahsilat','ykb_kredi');
+  const ykbToplamSatis = ykbKrediSatisNet + ykbKrediTahsilatNet;
+
+  const toplamKrediliSatis = vakifbankToplamSatis + ykbToplamSatis;
 
   // ---- MAİL ORDER KASA ----
-  const mailorderSatisToplam = sumRows('satis','mailorder');
+  const mailorderSatisTutar = sumRows('satis','mailorder');
+  const mailorderTahsilatTutar = sumRows('tahsilat','mailorder');
+  const mailorderSatisToplam = mailorderSatisTutar + mailorderTahsilatTutar; // Excel Q20 mantığı (satış+tahsilat)
   const mailorderOdemeToplam = sumRows('odeme','mailorder');
 
   // ---- BANKA HAREKETLERİ ----
@@ -577,22 +609,22 @@ function computeSummary(){
   const vakifGelenHavale = sumRows('satis','vakif_havale') + sumRows('tahsilat','vakif_havale');
   const vakifGidenHavale = sumRows('odeme','vakif_havale');
   const vakifGunHareket = vakifGelenHavale - vakifGidenHavale;
-  const vakifKrediTahsilat = sumHesabaGecen('tahsilat','vakif_kredi');
-  const vakifGuncelDurum = Number(s.vakif_devir||0) + vakifGunHareket + vakifKrediSatis + vakifKrediTahsilat;
+  // Excel Q38: sadece devir + havale hareketi — kart satışları dahil değil.
+  const vakifGuncelDurum = Number(s.vakif_devir||0) + vakifGunHareket;
 
   const ykbGelenHavale = sumRows('satis','ykb_havale') + sumRows('tahsilat','ykb_havale');
   const ykbGidenHavale = sumRows('odeme','ykb_havale');
   const ykbGunHareket = ykbGelenHavale - ykbGidenHavale;
-  const ykbKrediTahsilat = sumHesabaGecen('tahsilat','ykb_kredi');
-  const ykbGuncelDurum = Number(s.ykb_devir||0) + ykbGunHareket + ykbKrediSatis + ykbKrediTahsilat;
+  // Excel Q39: sadece devir + havale hareketi — kart satışları dahil değil.
+  const ykbGuncelDurum = Number(s.ykb_devir||0) + ykbGunHareket;
 
   const bankalarGuncelDurum = vakifGuncelDurum + ykbGuncelDurum;
   const bankaToplam = bankaDevir; // gün başı banka toplamı (devir)
 
   return {
     nakitGiris, nakitCikis, nakitDurum, kasaMevcut, fark,
-    vakifKrediSatis, ykbKrediSatis, toplamKrediliSatis,
-    mailorderSatisToplam, mailorderOdemeToplam,
+    vakifbankToplamSatis, ykbToplamSatis, toplamKrediliSatis,
+    mailorderSatisTutar, mailorderTahsilatTutar, mailorderSatisToplam, mailorderOdemeToplam,
     bankaDevir, bankaToplam,
     vakifGelenHavale, vakifGidenHavale, vakifGunHareket, vakifGuncelDurum,
     ykbGelenHavale, ykbGidenHavale, ykbGunHareket, ykbGuncelDurum,
@@ -619,8 +651,8 @@ function renderSummary(){
     <div class="sum-card">
       <div class="sum-head">Kredi Kasa</div>
       <div class="sum-body">
-        <div class="sum-row"><span>Vakıfbank Toplam Satış</span><b>${fmt(r.vakifKrediSatis)}</b></div>
-        <div class="sum-row"><span>YKB Toplam Satış</span><b>${fmt(r.ykbKrediSatis)}</b></div>
+        <div class="sum-row"><span>Vakıfbank Toplam (satış+tahsilat, net)</span><b>${fmt(r.vakifbankToplamSatis)}</b></div>
+        <div class="sum-row"><span>YKB Toplam (satış+tahsilat, net)</span><b>${fmt(r.ykbToplamSatis)}</b></div>
         <div class="sum-row total"><span>Toplam Kredili Satış</span><b>${fmt(r.toplamKrediliSatis)}</b></div>
       </div>
     </div>
@@ -628,7 +660,9 @@ function renderSummary(){
     <div class="sum-card">
       <div class="sum-head">Mail Order Kasa</div>
       <div class="sum-body">
-        <div class="sum-row"><span>Satış Toplam</span><b>${fmt(r.mailorderSatisToplam)}</b></div>
+        <div class="sum-row"><span>Satış Tutarı</span><b>${fmt(r.mailorderSatisTutar)}</b></div>
+        <div class="sum-row"><span>Tahsilat Tutarı</span><b>${fmt(r.mailorderTahsilatTutar)}</b></div>
+        <div class="sum-row total"><span>Satış+Tahsilat Toplam</span><b>${fmt(r.mailorderSatisToplam)}</b></div>
         <div class="sum-row"><span>Ödeme Toplam</span><b>${fmt(r.mailorderOdemeToplam)}</b></div>
       </div>
     </div>
