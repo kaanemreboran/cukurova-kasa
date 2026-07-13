@@ -256,18 +256,20 @@
       <input id="loginPassword" type="password" placeholder="Şifre" autocomplete="current-password">
       <div id="loginErr" style="color:var(--red);font-size:12px;margin:-4px 0 10px;display:none;"></div>
       <button class="btn" id="loginBtn" onclick="doLogin()">Giriş Yap</button>
-      <p style="text-align:center;margin-top:12px;"><a href="#" style="color:var(--indigo-light);font-size:12.5px;" onclick="showRegisterPane();return false;">Yeni kullanıcı oluştur</a></p>
     </div>
-    <div id="registerPane" class="hidden">
-      <h2>Yeni Kullanıcı</h2>
-      <p>Adını, kullanıcı adını ve bir şifre belirle.</p>
-      <input id="regAdSoyad" type="text" placeholder="Ad Soyad">
-      <input id="regUsername" type="text" placeholder="Kullanıcı Adı" autocomplete="username">
-      <input id="regPassword" type="password" placeholder="Şifre" autocomplete="new-password">
-      <div id="regErr" style="color:var(--red);font-size:12px;margin:-4px 0 10px;display:none;"></div>
-      <button class="btn" id="regBtn" onclick="doRegister()">Hesap Oluştur ve Giriş Yap</button>
-      <p style="text-align:center;margin-top:12px;"><a href="#" style="color:var(--indigo-light);font-size:12.5px;" onclick="showLoginPane();return false;">Zaten hesabım var</a></p>
-    </div>
+  </div>
+</div>
+
+<div id="passwordOverlay" class="login-overlay hidden">
+  <div class="login-box">
+    <h2>Şifre Değiştir</h2>
+    <p>Mevcut şifreni ve yeni şifreni gir.</p>
+    <input id="pwCurrent" type="password" placeholder="Mevcut Şifre" autocomplete="current-password">
+    <input id="pwNew" type="password" placeholder="Yeni Şifre" autocomplete="new-password">
+    <input id="pwNewConfirm" type="password" placeholder="Yeni Şifre (Tekrar)" autocomplete="new-password">
+    <div id="pwErr" style="color:var(--red);font-size:12px;margin:-4px 0 10px;display:none;"></div>
+    <button class="btn" id="pwBtn" onclick="changePassword()">Şifreyi Güncelle</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="closePasswordModal()">Vazgeç</button>
   </div>
 </div>
 
@@ -282,6 +284,7 @@
   <div class="userbox">
     <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()">☀️ <span id="themeToggleLabel">Açık Mod</span></button>
     <span>Kullanıcı: <b id="currentUserLabel">—</b></span>
+    <button onclick="openPasswordModal()">Şifre Değiştir</button>
     <button onclick="doLogout()">Çıkış</button>
   </div>
 </header>
@@ -475,14 +478,6 @@ async function sha256Hex(str){
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
 
-function showRegisterPane(){
-  document.getElementById('loginPane').classList.add('hidden');
-  document.getElementById('registerPane').classList.remove('hidden');
-}
-function showLoginPane(){
-  document.getElementById('registerPane').classList.add('hidden');
-  document.getElementById('loginPane').classList.remove('hidden');
-}
 function showAuthErr(id, msg){
   const el = document.getElementById(id);
   el.textContent = msg; el.style.display = 'block';
@@ -522,37 +517,46 @@ async function doLogin(){
   }
 }
 
-async function doRegister(){
-  hideAuthErr('regErr');
-  const adSoyad = document.getElementById('regAdSoyad').value.trim();
-  const username = document.getElementById('regUsername').value.trim();
-  const password = document.getElementById('regPassword').value;
-  if (!adSoyad || !username || !password){ showAuthErr('regErr','Tüm alanları doldur'); return; }
-  if (password.length < 4){ showAuthErr('regErr','Şifre en az 4 karakter olmalı'); return; }
+/* ============================================================
+   ŞİFRE DEĞİŞTİRME
+   ============================================================ */
+function openPasswordModal(){
+  document.getElementById('pwCurrent').value = '';
+  document.getElementById('pwNew').value = '';
+  document.getElementById('pwNewConfirm').value = '';
+  hideAuthErr('pwErr');
+  document.getElementById('passwordOverlay').classList.remove('hidden');
+}
+function closePasswordModal(){
+  document.getElementById('passwordOverlay').classList.add('hidden');
+}
+async function changePassword(){
+  hideAuthErr('pwErr');
+  const current = document.getElementById('pwCurrent').value;
+  const next = document.getElementById('pwNew').value;
+  const confirm = document.getElementById('pwNewConfirm').value;
+  if (!current || !next || !confirm){ showAuthErr('pwErr','Tüm alanları doldur'); return; }
+  if (next.length < 4){ showAuthErr('pwErr','Yeni şifre en az 4 karakter olmalı'); return; }
+  if (next !== confirm){ showAuthErr('pwErr','Yeni şifreler eşleşmiyor'); return; }
 
-  const btn = document.getElementById('regBtn');
-  btn.disabled = true; btn.textContent = 'Oluşturuluyor…';
+  const btn = document.getElementById('pwBtn');
+  btn.disabled = true; btn.textContent = 'Güncelleniyor…';
   try{
-    const { data: existing } = await sb.from('kullanicilar').select('id').eq('kullanici_adi', username).maybeSingle();
-    if (existing){ showAuthErr('regErr','Bu kullanıcı adı zaten alınmış'); return; }
-
-    const hash = await sha256Hex(password);
-    const { data, error } = await sb.from('kullanicilar')
-      .insert({ kullanici_adi: username, sifre_hash: hash, ad_soyad: adSoyad })
-      .select().single();
+    const { data, error } = await sb.from('kullanicilar').select('*').eq('kullanici_adi', currentUsername).maybeSingle();
     if (error) throw error;
+    const currentHash = await sha256Hex(current);
+    if (!data || data.sifre_hash !== currentHash){ showAuthErr('pwErr','Mevcut şifre hatalı'); return; }
 
-    currentUser = data.ad_soyad;
-    currentUsername = data.kullanici_adi;
-    localStorage.setItem('kasa_user', currentUser);
-    localStorage.setItem('kasa_username', currentUsername);
-    document.getElementById('loginOverlay').classList.add('hidden');
-    document.getElementById('currentUserLabel').textContent = currentUser;
-    init();
+    const newHash = await sha256Hex(next);
+    const { error: updErr } = await sb.from('kullanicilar').update({ sifre_hash: newHash }).eq('id', data.id);
+    if (updErr) throw updErr;
+
+    closePasswordModal();
+    toast('Şifren güncellendi ✓');
   } catch(err){
-    showAuthErr('regErr', 'Kayıt hatası: ' + err.message);
+    showAuthErr('pwErr', 'Hata: ' + err.message);
   } finally {
-    btn.disabled = false; btn.textContent = 'Hesap Oluştur ve Giriş Yap';
+    btn.disabled = false; btn.textContent = 'Şifreyi Güncelle';
   }
 }
 
