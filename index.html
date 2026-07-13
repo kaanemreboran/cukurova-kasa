@@ -33,8 +33,37 @@
     color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
     min-height:100vh;
+    transition:background .15s ease, color .15s ease;
   }
   ::selection{background:var(--indigo);color:#fff;}
+
+  /* ---------- light theme ---------- */
+  html[data-theme="light"]{
+    --navy-950:#f4f5fb;
+    --navy-900:#ffffff;
+    --navy-800:#eef0fa;
+    --navy-700:#e4e7f7;
+    --navy-600:#d8dcf3;
+    --ink:#1a2140;
+    --ink-dim:#6b7290;
+    --card:#ffffff;
+    --line:#e1e4f2;
+  }
+  html[data-theme="light"] header{
+    background:linear-gradient(135deg,var(--navy-900),var(--navy-800));
+    box-shadow:0 1px 0 var(--line);
+  }
+  html[data-theme="light"] .toast{box-shadow:0 8px 24px rgba(20,25,60,.12);}
+  html[data-theme="light"] .card, html[data-theme="light"] .sum-card, html[data-theme="light"] .history-item{
+    box-shadow:0 1px 3px rgba(20,25,60,.06);
+  }
+
+  .theme-toggle{
+    background:none;border:1px solid var(--line);color:var(--ink-dim);
+    border-radius:20px;padding:5px 12px;font-size:12px;cursor:pointer;
+    display:flex;align-items:center;gap:6px;
+  }
+  .theme-toggle:hover{border-color:var(--indigo-light);color:var(--ink);}
 
   /* ---------- shell ---------- */
   header{
@@ -216,6 +245,7 @@
     </div>
   </div>
   <div class="userbox">
+    <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()">☀️ <span id="themeToggleLabel">Açık Mod</span></button>
     <span>Kullanıcı: <b id="currentUserLabel">—</b></span>
     <button onclick="doLogout()">Çıkış</button>
   </div>
@@ -236,6 +266,7 @@
       <span class="status-pill yeni" id="statusPill">Yeni</span>
       <div class="spacer"></div>
       <button class="btn ghost" onclick="loadFoyForDate(true)">Yeniden Yükle</button>
+      <button class="btn danger" id="deleteBtn" onclick="deleteFoy()">Föyü Sil</button>
       <button class="btn" id="saveBtn" onclick="saveFoy()">Föyü Kaydet</button>
     </div>
 
@@ -351,6 +382,30 @@ function newRow(hasHesabaGecen){
 }
 
 /* ============================================================
+   THEME
+   ============================================================ */
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  const btn = document.getElementById('themeToggleBtn');
+  const label = document.getElementById('themeToggleLabel');
+  if (theme === 'light'){
+    btn.firstChild.textContent = '🌙 ';
+    label.textContent = 'Koyu Mod';
+  } else {
+    btn.firstChild.textContent = '☀️ ';
+    label.textContent = 'Açık Mod';
+  }
+  localStorage.setItem('kasa_theme', theme);
+}
+function toggleTheme(){
+  const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  applyTheme(current === 'light' ? 'dark' : 'light');
+}
+function initTheme(){
+  applyTheme(localStorage.getItem('kasa_theme') || 'dark');
+}
+
+/* ============================================================
    AUTH (basit isim girişi — RLS şirket içi kullanım için açık)
    ============================================================ */
 function doLogin(){
@@ -420,6 +475,7 @@ async function loadFoyForDate(force){
     state = blankState(tarih);
     setStatus('yeni','Yeni Föy');
     render();
+    updateDeleteBtnState();
     return;
   }
 
@@ -442,6 +498,7 @@ async function loadFoyForDate(force){
   }
   setStatus(foy.durum === 'kapali' ? 'kapali' : 'acik', foy.durum === 'kapali' ? 'Kapalı' : 'Açık');
   render();
+  updateDeleteBtnState();
 }
 
 function setStatus(cls,label){
@@ -693,6 +750,41 @@ function renderSummary(){
 }
 
 /* ============================================================
+   DELETE
+   ============================================================ */
+async function deleteFoy(){
+  if (!foyExists || !foyId){
+    toast('Henüz kaydedilmemiş bir föy silinemez', true);
+    return;
+  }
+  const ok = confirm(`${formatDateTR(state.tarih)} tarihli föyü kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
+  if (!ok) return;
+
+  const btn = document.getElementById('deleteBtn');
+  btn.disabled = true; btn.textContent = 'Siliniyor…';
+  try{
+    // kasa_hareketleri, foy_id üzerinde "on delete cascade" ile otomatik silinir
+    const { error } = await sb.from('kasa_foyleri').delete().eq('id', foyId);
+    if (error) throw error;
+    toast('Föy silindi ✓');
+    foyId = null; foyExists = false;
+    state = blankState(state.tarih);
+    setStatus('yeni','Yeni Föy');
+    render();
+    updateDeleteBtnState();
+  } catch(err){
+    toast('Silme hatası: ' + err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Föyü Sil';
+  }
+}
+function updateDeleteBtnState(){
+  const btn = document.getElementById('deleteBtn');
+  btn.disabled = !foyExists;
+  btn.style.opacity = foyExists ? '1' : '.5';
+}
+
+/* ============================================================
    SAVE
    ============================================================ */
 async function saveFoy(){
@@ -785,8 +877,21 @@ async function loadHistory(){
       <div class="nums">
         <div><span>Kasa Mevcut</span>${foy.kasa_mevcut===null?'—':fmt(foy.kasa_mevcut)}</div>
       </div>
+      <button class="icon-btn" style="font-size:17px;" title="Föyü sil">✕</button>
     `;
-    div.onclick = () => {
+    const clickArea = div;
+    const delBtn = div.querySelector('button.icon-btn');
+    delBtn.onclick = async (ev) => {
+      ev.stopPropagation();
+      const ok = confirm(`${formatDateTR(foy.tarih)} tarihli föyü kalıcı olarak silmek istediğine emin misin?`);
+      if (!ok) return;
+      const { error } = await sb.from('kasa_foyleri').delete().eq('id', foy.id);
+      if (error){ toast('Silme hatası: ' + error.message, true); return; }
+      toast('Föy silindi ✓');
+      if (state && state.tarih === foy.tarih){ foyId = null; foyExists = false; updateDeleteBtnState(); }
+      loadHistory();
+    };
+    clickArea.onclick = () => {
       switchTab('foy');
       document.getElementById('tarihInput').value = foy.tarih;
       loadFoyForDate();
@@ -815,6 +920,7 @@ function toast(msg, isErr){
 /* ============================================================
    BOOT
    ============================================================ */
+initTheme();
 if (checkLogin()) init();
 </script>
 </body>
