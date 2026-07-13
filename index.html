@@ -136,6 +136,26 @@
     font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
     color:var(--indigo-light);margin:6px 0 -4px 2px;
   }
+  .group-header{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    cursor:pointer;user-select:none;
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:12px 14px;margin-top:4px;
+  }
+  .group-header:hover{border-color:var(--indigo-light);}
+  .group-header .g-left{display:flex;align-items:center;gap:10px;}
+  .group-header .chevron{
+    display:inline-block;transition:transform .18s ease;color:var(--ink-dim);font-size:11px;
+  }
+  .group-header.open .chevron{transform:rotate(90deg);}
+  .group-header .g-title{font-size:13.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;}
+  .group-header .g-total{font-size:13px;color:var(--ink-dim);font-weight:600;}
+  .group-header .g-total b{color:var(--ink);}
+  .group-body{
+    display:flex;flex-direction:column;gap:12px;
+    padding-top:12px;
+  }
+  .group-body.collapsed{display:none;}
 
   .card{
     background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
@@ -510,17 +530,51 @@ function setStatus(cls,label){
 /* ============================================================
    RENDER — FORM CARDS
    ============================================================ */
+let groupOpen = JSON.parse(localStorage.getItem('kasa_group_open') || '{"satis":true,"tahsilat":true,"odeme":true}');
+
+function saveGroupOpen(){
+  localStorage.setItem('kasa_group_open', JSON.stringify(groupOpen));
+}
+function toggleGroup(tip){
+  groupOpen[tip] = !groupOpen[tip];
+  saveGroupOpen();
+  const body = document.getElementById(`group-body-${tip}`);
+  const head = document.getElementById(`group-head-${tip}`);
+  body.classList.toggle('collapsed', !groupOpen[tip]);
+  head.classList.toggle('open', groupOpen[tip]);
+}
+function groupTotal(tip){
+  let total = 0;
+  for (const m of SECTIONS[tip].methods) total += sumRows(tip, m.key);
+  return total;
+}
+
 function render(){
   const container = document.getElementById('formsContainer');
   container.innerHTML = '';
   for (const tip of ['satis','tahsilat','odeme']){
-    const groupTitle = document.createElement('div');
-    groupTitle.className = 'group-title';
-    groupTitle.textContent = SECTIONS[tip].title;
-    container.appendChild(groupTitle);
+    const isOpen = groupOpen[tip] !== false;
+
+    const header = document.createElement('div');
+    header.className = 'group-header' + (isOpen ? ' open' : '');
+    header.id = `group-head-${tip}`;
+    header.innerHTML = `
+      <div class="g-left">
+        <span class="chevron">▶</span>
+        <span class="g-title">${SECTIONS[tip].title}</span>
+      </div>
+      <span class="g-total">Toplam: <b id="group-total-${tip}">${fmt(groupTotal(tip))}</b></span>
+    `;
+    header.onclick = () => toggleGroup(tip);
+    container.appendChild(header);
+
+    const body = document.createElement('div');
+    body.className = 'group-body' + (isOpen ? '' : ' collapsed');
+    body.id = `group-body-${tip}`;
     for (const m of SECTIONS[tip].methods){
-      container.appendChild(renderCard(tip, m));
+      body.appendChild(renderCard(tip, m));
     }
+    container.appendChild(body);
   }
   renderSummary();
 }
@@ -612,6 +666,8 @@ function updateCardTotal(tip, key){
   const total = sumRows(tip, key);
   const el = document.getElementById(`total-${tip}-${key}`);
   if (el) el.textContent = fmt(total);
+  const gEl = document.getElementById(`group-total-${tip}`);
+  if (gEl) gEl.textContent = fmt(groupTotal(tip));
 }
 
 function escapeAttr(v){
