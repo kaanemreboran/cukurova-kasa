@@ -421,10 +421,47 @@
 
   <!-- ===================== FİŞ (PLACEHOLDER) ===================== -->
   <section id="tabFis" class="hidden">
-    <div class="placeholder-box">
-      <div class="big-ico">🧾</div>
-      <h3>Fiş Çıktısı</h3>
-      <p>Bu bölümden satış fişi / makbuz çıktısı alınabilecek. Şu an için tasarım aşamasında — yakında etkinleştirilecek.</p>
+    <div class="toolbar">
+      <label>Cari / Firma</label>
+      <input type="text" id="fisCari" placeholder="Örn: ÇOPUR OTO / HÜSEYİN ÇOPUR" style="flex:1;min-width:220px;">
+      <label>Plaka</label>
+      <input type="text" id="fisPlaka" placeholder="01 ABC 123" style="width:130px;">
+      <div class="spacer"></div>
+      <button class="btn ghost" onclick="clearFis()">Temizle</button>
+      <button class="btn" onclick="printFis()">🖨️ Fişi Yazdır</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Ürünler</h3><span class="toplam">Genel Toplam: <b id="fisGenelToplam">0,00</b></span></div>
+      <div class="card-body">
+        <table>
+          <thead><tr>
+            <th style="width:14%">Ürün Kodu</th>
+            <th>Ürün Adı</th>
+            <th style="width:7%">Adet</th>
+            <th style="width:11%">Fiyat</th>
+            <th style="width:8%">İsk1 %</th>
+            <th style="width:8%">İsk2 %</th>
+            <th style="width:8%">KDV %</th>
+            <th style="width:12%">Tutar</th>
+            <th class="action-col"></th>
+          </tr></thead>
+          <tbody id="fisRowsBody"></tbody>
+        </table>
+        <button class="add-row-btn" onclick="addFisRow()">+ Ürün Ekle</button>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:1fr 320px;margin-top:16px;">
+      <div></div>
+      <div class="sum-card">
+        <div class="sum-head">Fiş Özeti</div>
+        <div class="sum-body">
+          <div class="sum-row"><span>Ara Toplam</span><b id="fisAraToplam">0,00</b></div>
+          <div class="sum-row"><span>KDV Toplam</span><b id="fisKdvToplam">0,00</b></div>
+          <div class="sum-row total"><span>Genel Toplam</span><b id="fisGenelToplam2">0,00</b></div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -746,6 +783,7 @@ function switchSide(side){
     document.getElementById('tabHareketler').classList.add('hidden');
   }
   if (side === 'admin') loadAdminPanel();
+  if (side === 'fis' && !fisRows.length){ fisRows.push(newFisRow()); renderFisRows(); }
 }
 
 /* ============================================================
@@ -1402,6 +1440,142 @@ function updateDeleteBtnState(){
 /* ============================================================
    YAZDIR (FÖY ÇIKTISI)
    ============================================================ */
+/* ============================================================
+   FİŞ (SİPARİŞ FİŞİ) OLUŞTURUCU
+   ============================================================ */
+let fisRows = [];
+function newFisRow(){
+  return { kod:'', ad:'', adet:1, fiyat:0, isk1:0, isk2:0, kdv:20, _id: Math.random().toString(36).slice(2) };
+}
+function fisRowTutar(row){
+  const base = (Number(row.fiyat)||0) * (Number(row.adet)||0);
+  const afterIsk1 = base * (1 - (Number(row.isk1)||0)/100);
+  const afterIsk2 = afterIsk1 * (1 - (Number(row.isk2)||0)/100);
+  return afterIsk2;
+}
+function computeFisTotals(){
+  let araToplam = 0, kdvToplam = 0;
+  for (const row of fisRows){
+    const tutar = fisRowTutar(row);
+    araToplam += tutar;
+    kdvToplam += tutar * ((Number(row.kdv)||0)/100);
+  }
+  return { araToplam, kdvToplam, genelToplam: araToplam + kdvToplam };
+}
+
+function addFisRow(){
+  fisRows.push(newFisRow());
+  renderFisRows();
+}
+function removeFisRow(idx){
+  fisRows.splice(idx, 1);
+  renderFisRows();
+}
+function updateFisCell(idx, field, value){
+  const row = fisRows[idx];
+  if (field === 'kod' || field === 'ad') row[field] = value;
+  else row[field] = value === '' ? 0 : Number(value);
+  renderFisRowTutar(idx);
+  renderFisTotalsOnly();
+}
+function renderFisRowTutar(idx){
+  const el = document.getElementById(`fis-tutar-${idx}`);
+  if (el) el.textContent = fmt(fisRowTutar(fisRows[idx]));
+}
+function renderFisTotalsOnly(){
+  const t = computeFisTotals();
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = fmt(val); };
+  set('fisAraToplam', t.araToplam);
+  set('fisKdvToplam', t.kdvToplam);
+  set('fisGenelToplam', t.genelToplam);
+  set('fisGenelToplam2', t.genelToplam);
+}
+
+function renderFisRows(){
+  const tbody = document.getElementById('fisRowsBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  fisRows.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    tr.className = 'row-line';
+    tr.innerHTML = `
+      <td><input type="text" value="${escapeAttr(row.kod)}" oninput="updateFisCell(${idx},'kod',this.value)"></td>
+      <td><input type="text" value="${escapeAttr(row.ad)}" oninput="updateFisCell(${idx},'ad',this.value)"></td>
+      <td class="tutar-col"><input type="number" step="1" value="${row.adet}" oninput="updateFisCell(${idx},'adet',this.value)"></td>
+      <td class="tutar-col"><input type="number" step="0.01" value="${row.fiyat}" oninput="updateFisCell(${idx},'fiyat',this.value)"></td>
+      <td class="tutar-col"><input type="number" step="1" value="${row.isk1}" oninput="updateFisCell(${idx},'isk1',this.value)"></td>
+      <td class="tutar-col"><input type="number" step="1" value="${row.isk2}" oninput="updateFisCell(${idx},'isk2',this.value)"></td>
+      <td class="tutar-col"><input type="number" step="1" value="${row.kdv}" oninput="updateFisCell(${idx},'kdv',this.value)"></td>
+      <td class="tutar-col"><span id="fis-tutar-${idx}" style="font-variant-numeric:tabular-nums;">${fmt(fisRowTutar(row))}</span></td>
+      <td class="action-col"><button class="icon-btn" onclick="removeFisRow(${idx})">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  renderFisTotalsOnly();
+}
+
+function clearFis(){
+  const ok = fisRows.length ? confirm('Fişi temizlemek istediğine emin misin?') : true;
+  if (!ok) return;
+  document.getElementById('fisCari').value = '';
+  document.getElementById('fisPlaka').value = '';
+  fisRows = [];
+  renderFisRows();
+}
+
+function fisNo(){
+  const d = new Date();
+  const pad = (n,l=2) => String(n).padStart(l,'0');
+  return 'P' + d.getFullYear() + pad(d.getMonth()+1) + pad(d.getDate()) + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+}
+
+function printFis(){
+  if (!fisRows.length){ toast('Fişte ürün yok', true); return; }
+  const cari = document.getElementById('fisCari').value.trim();
+  const plaka = document.getElementById('fisPlaka').value.trim();
+  const t = computeFisTotals();
+  const d = new Date();
+  const tarihStr = d.toLocaleDateString('tr-TR');
+  const saatStr = d.toLocaleTimeString('tr-TR');
+
+  let html = `
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;">
+      <img src="cukurova-logo.png" style="width:52px;height:52px;object-fit:contain;">
+      <div>
+        <div style="font-size:17px;font-weight:800;letter-spacing:.5px;">ÇUKUROVA<br><span style="font-weight:600;font-size:13px;">OTOMOTİV</span></div>
+      </div>
+      <div style="flex:1;"></div>
+      <div style="text-align:right;font-size:11.5px;color:#333;">
+        <div>${escapeAttr(fisNo())}</div>
+        <div>${saatStr}</div>
+        <div>${tarihStr}</div>
+      </div>
+    </div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:4px;">${escapeAttr(cari || '—')}</div>
+    <div style="font-size:12.5px;color:#333;margin-bottom:14px;">Plaka: ${escapeAttr(plaka || '—')}</div>
+    <table><thead><tr>
+      <th>ÜRÜN KODU</th><th>ÜRÜN ADI</th><th>AD</th><th>FİYAT</th><th>İSK1</th><th>İSK2</th><th>KDV</th><th>TUTAR</th>
+    </tr></thead><tbody>
+  `;
+  for (const row of fisRows){
+    html += `<tr>
+      <td>${escapeAttr(row.kod)}</td><td>${escapeAttr(row.ad)}</td><td>${row.adet}</td>
+      <td>${fmt(row.fiyat)}</td><td>${row.isk1}</td><td>${row.isk2}</td><td>${row.kdv}</td>
+      <td>${fmt(fisRowTutar(row))}</td>
+    </tr>`;
+  }
+  html += `</tbody></table>`;
+  html += `<div class="p-summary" style="grid-template-columns:1fr;max-width:280px;margin-left:auto;">
+    <div><span>TOPLAM</span><b>${fmt(t.araToplam)}</b></div>
+    <div><span>ARA TOPLAM</span><b>${fmt(t.araToplam)}</b></div>
+    <div><span>KDV</span><b>${fmt(t.kdvToplam)}</b></div>
+    <div><span>GENEL TOPLAM</span><b>${fmt(t.genelToplam)}</b></div>
+  </div>`;
+
+  document.getElementById('printArea').innerHTML = html;
+  window.print();
+}
+
 function printFoy(){
   const r = computeSummary();
   const tipLabels = { satis:'Satışlar', tahsilat:'Tahsilatlar', odeme:'Ödemeler', masraf:'Masraflar' };
