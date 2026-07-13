@@ -93,6 +93,27 @@
   }
   nav.tabs button.active{color:var(--ink);border-bottom-color:var(--indigo-light);}
 
+  /* ---------- app body: sidebar + content ---------- */
+  .app-body{display:flex;align-items:stretch;min-height:calc(100vh - 61px);}
+  .side-nav{
+    width:190px;flex-shrink:0;background:var(--navy-900);border-right:1px solid var(--line);
+    padding:16px 10px;display:flex;flex-direction:column;gap:4px;
+  }
+  .side-nav .side-label{
+    font-size:10.5px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;
+    color:var(--ink-dim);padding:10px 10px 4px;
+  }
+  .side-nav button{
+    display:flex;align-items:center;gap:9px;text-align:left;
+    background:none;border:none;color:var(--ink-dim);
+    padding:10px 12px;font-size:13.5px;font-weight:600;cursor:pointer;
+    border-radius:8px;
+  }
+  .side-nav button:hover{background:var(--navy-800);color:var(--ink);}
+  .side-nav button.active{background:var(--indigo);color:#fff;}
+  .side-nav button .side-ico{font-size:15px;width:18px;text-align:center;}
+  .content-col{flex:1;min-width:0;}
+
   main{padding:18px 20px 60px;max-width:1400px;margin:0 auto;}
   .hidden{display:none !important;}
 
@@ -234,6 +255,29 @@
 
   .empty{color:var(--ink-dim);font-size:13px;padding:20px;text-align:center;}
 
+  .placeholder-box{
+    background:var(--card);border:1px dashed var(--line);border-radius:var(--radius);
+    padding:48px 24px;text-align:center;color:var(--ink-dim);
+  }
+  .placeholder-box .big-ico{font-size:36px;margin-bottom:10px;}
+  .placeholder-box h3{color:var(--ink);margin:0 0 6px;font-size:15px;}
+  .placeholder-box p{margin:0;font-size:13px;max-width:360px;margin:0 auto;}
+
+  .admin-card{
+    background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:16px;margin-bottom:16px;
+  }
+  .admin-card h3{margin:0 0 12px;font-size:13.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--indigo-light);}
+  .admin-cat-row{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    padding:9px 4px;border-bottom:1px solid var(--line);font-size:13.5px;
+  }
+  .admin-cat-row:last-child{border-bottom:none;}
+  .admin-cat-row .tip-badge{
+    font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:20px;
+    background:var(--navy-800);color:var(--ink-dim);text-transform:uppercase;margin-right:8px;
+  }
+
   .login-overlay{
     position:fixed;inset:0;background:var(--navy-950);display:flex;
     align-items:center;justify-content:center;z-index:200;
@@ -283,19 +327,27 @@
   </div>
   <div class="userbox">
     <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()">☀️ <span id="themeToggleLabel">Açık Mod</span></button>
-    <span>Kullanıcı: <b id="currentUserLabel">—</b></span>
-    <button onclick="openPasswordModal()">Şifre Değiştir</button>
-    <button onclick="doLogout()">Çıkış</button>
+    <button onclick="openAccountModal()" style="background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 10px;font-size:12.5px;cursor:pointer;">👤 <b id="currentUserLabel">—</b></button>
   </div>
 </header>
 
-<nav class="tabs">
-  <button id="tabBtnFoy" class="active" onclick="switchTab('foy')">Bugünkü Föy</button>
-  <button id="tabBtnGecmis" onclick="switchTab('gecmis')">Geçmiş Föyler</button>
-  <button id="tabBtnHareketler" onclick="switchTab('hareketler')">Hareketler</button>
-</nav>
+<div class="app-body">
+  <aside class="side-nav">
+    <div class="side-label">Föy</div>
+    <button id="sideBtnFoy" class="active" onclick="switchSide('foy')"><span class="side-ico">📋</span> Bugünkü Föy</button>
+    <div class="side-label" style="margin-top:6px;">Diğer</div>
+    <button id="sideBtnFis" onclick="switchSide('fis')"><span class="side-ico">🧾</span> Fiş</button>
+    <button id="sideBtnAdmin" onclick="switchSide('admin')"><span class="side-ico">⚙️</span> Admin</button>
+  </aside>
 
-<main>
+  <div class="content-col">
+    <nav class="tabs" id="foySubTabs">
+      <button id="tabBtnFoy" class="active" onclick="switchTab('foy')">Bugünkü Föy</button>
+      <button id="tabBtnGecmis" onclick="switchTab('gecmis')">Geçmiş Föyler</button>
+      <button id="tabBtnHareketler" onclick="switchTab('hareketler')">Hareketler</button>
+    </nav>
+
+    <main>
 
   <!-- ===================== FÖY TAB ===================== -->
   <section id="tabFoy">
@@ -350,7 +402,57 @@
     </div>
   </section>
 
+  <!-- ===================== FİŞ (PLACEHOLDER) ===================== -->
+  <section id="tabFis" class="hidden">
+    <div class="placeholder-box">
+      <div class="big-ico">🧾</div>
+      <h3>Fiş Çıktısı</h3>
+      <p>Bu bölümden satış fişi / makbuz çıktısı alınabilecek. Şu an için tasarım aşamasında — yakında etkinleştirilecek.</p>
+    </div>
+  </section>
+
+  <!-- ===================== ADMIN PANELİ ===================== -->
+  <section id="tabAdmin" class="hidden">
+    <div class="admin-card">
+      <h3>Yeni Kategori Ekle</h3>
+      <div class="toolbar" style="margin-bottom:0;">
+        <label>İşlem Tipi</label>
+        <select id="adminTip">
+          <option value="satis">Satışlar</option>
+          <option value="tahsilat">Tahsilatlar</option>
+          <option value="odeme">Ödemeler</option>
+          <option value="masraf">Masraflar</option>
+        </select>
+        <label>Kategori Adı</label>
+        <input type="text" id="adminEtiket" placeholder="Örn: Sipay ile Satış" style="flex:1;min-width:180px;">
+        <button class="btn" onclick="addCategory()">Kategori Ekle</button>
+      </div>
+      <p style="font-size:11.5px;color:var(--ink-dim);margin:10px 2px 0;">Not: Yeni kategoriler için otomatik komisyon hesabı (Vakıfbank/YKB gibi) desteklenmez, tutar elle girilir.</p>
+    </div>
+    <div class="admin-card">
+      <h3>Mevcut Özel Kategoriler</h3>
+      <div id="adminCatList"><div class="empty">Yükleniyor…</div></div>
+    </div>
+    <div class="admin-card">
+      <h3>Kullanıcılar</h3>
+      <div id="adminUserList"><div class="empty">Yükleniyor…</div></div>
+    </div>
+  </section>
+
 </main>
+  </div>
+</div>
+
+<div id="accountOverlay" class="login-overlay hidden">
+  <div class="login-box">
+    <h2>Hesabım</h2>
+    <div class="sum-row" style="margin-bottom:8px;"><span>Ad Soyad</span><b id="accAdSoyad">—</b></div>
+    <div class="sum-row" style="margin-bottom:16px;"><span>Kullanıcı Adı</span><b id="accUsername">—</b></div>
+    <button class="btn" onclick="closeAccountModal(); openPasswordModal();">Şifre Değiştir</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="doLogout()">Çıkış Yap</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="closeAccountModal()">Kapat</button>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -520,6 +622,15 @@ async function doLogin(){
 /* ============================================================
    ŞİFRE DEĞİŞTİRME
    ============================================================ */
+function openAccountModal(){
+  document.getElementById('accAdSoyad').textContent = currentUser || '—';
+  document.getElementById('accUsername').textContent = currentUsername || '—';
+  document.getElementById('accountOverlay').classList.remove('hidden');
+}
+function closeAccountModal(){
+  document.getElementById('accountOverlay').classList.add('hidden');
+}
+
 function openPasswordModal(){
   document.getElementById('pwCurrent').value = '';
   document.getElementById('pwNew').value = '';
@@ -588,6 +699,26 @@ function switchTab(tab){
   if (tab === 'hareketler') loadLog();
 }
 
+function switchSide(side){
+  document.getElementById('sideBtnFoy').classList.toggle('active', side === 'foy');
+  document.getElementById('sideBtnFis').classList.toggle('active', side === 'fis');
+  document.getElementById('sideBtnAdmin').classList.toggle('active', side === 'admin');
+
+  document.getElementById('foySubTabs').classList.toggle('hidden', side !== 'foy');
+  document.getElementById('tabFis').classList.toggle('hidden', side !== 'fis');
+  document.getElementById('tabAdmin').classList.toggle('hidden', side !== 'admin');
+
+  if (side === 'foy'){
+    switchTab('foy');
+  } else {
+    // Föy alt sekmelerini gizle (Fiş/Admin görüntülenirken)
+    document.getElementById('tabFoy').classList.add('hidden');
+    document.getElementById('tabGecmis').classList.add('hidden');
+    document.getElementById('tabHareketler').classList.add('hidden');
+  }
+  if (side === 'admin') loadAdminPanel();
+}
+
 /* ============================================================
    INIT
    ============================================================ */
@@ -596,8 +727,9 @@ function todayStr(){
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
 }
 
-function init(){
+async function init(){
   document.getElementById('tarihInput').value = todayStr();
+  await loadCustomCategories();
   loadFoyForDate();
   if ('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(()=>{});
@@ -785,6 +917,105 @@ function removeRow(tip, key, idx){
 }
 function findMethod(tip, key){
   return SECTIONS[tip].methods.find(m => m.key === key);
+}
+
+/* ============================================================
+   ÖZEL KATEGORİLER (admin panelinden eklenen) — SECTIONS'a birleştirilir
+   ============================================================ */
+let customCategoriesLoaded = false;
+async function loadCustomCategories(){
+  const { data, error } = await sb.from('kategoriler').select('*').order('created_at');
+  if (error){ toast('Kategoriler yüklenemedi: ' + error.message, true); return; }
+  for (const cat of (data||[])){
+    if (!SECTIONS[cat.islem_tipi]) continue;
+    if (SECTIONS[cat.islem_tipi].methods.some(m => m.key === cat.anahtar)) continue; // zaten eklenmiş
+    SECTIONS[cat.islem_tipi].methods.push({ key: cat.anahtar, label: cat.etiket, hesabaGecen: false, custom: true, catId: cat.id });
+  }
+  customCategoriesLoaded = true;
+}
+
+function slugify(str){
+  const map = { 'ç':'c','ğ':'g','ı':'i','ö':'o','ş':'s','ü':'u','Ç':'c','Ğ':'g','İ':'i','Ö':'o','Ş':'s','Ü':'u' };
+  return str.replace(/[çğışöüÇĞİŞÖÜ]/g, ch => map[ch] || ch)
+    .toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+}
+
+async function addCategory(){
+  const tip = document.getElementById('adminTip').value;
+  const etiketInput = document.getElementById('adminEtiket');
+  const etiket = etiketInput.value.trim();
+  if (!etiket){ toast('Kategori adı gerekli', true); return; }
+  const anahtar = slugify(etiket) + '_' + Math.random().toString(36).slice(2,6);
+
+  try{
+    const { data, error } = await sb.from('kategoriler').insert({ islem_tipi: tip, anahtar, etiket }).select().single();
+    if (error) throw error;
+    SECTIONS[tip].methods.push({ key: data.anahtar, label: data.etiket, hesabaGecen: false, custom: true, catId: data.id });
+    if (state) state[tip][data.anahtar] = [];
+    etiketInput.value = '';
+    toast('Kategori eklendi ✓');
+    renderAdminCatList();
+    if (document.getElementById('tabFoy') && !document.getElementById('tabFoy').classList.contains('hidden')) render();
+  } catch(err){
+    toast('Kategori eklenemedi: ' + err.message, true);
+  }
+}
+
+async function deleteCategory(tip, key, catId){
+  const ok = confirm('Bu kategoriyi silmek istediğine emin misin? Bu kategoriyle daha önce kaydedilmiş hareketler veritabanında kalır ama ekranda görünmez.');
+  if (!ok) return;
+  try{
+    const { error } = await sb.from('kategoriler').delete().eq('id', catId);
+    if (error) throw error;
+    SECTIONS[tip].methods = SECTIONS[tip].methods.filter(m => m.key !== key);
+    toast('Kategori silindi ✓');
+    renderAdminCatList();
+    if (document.getElementById('tabFoy') && !document.getElementById('tabFoy').classList.contains('hidden')) render();
+  } catch(err){
+    toast('Silme hatası: ' + err.message, true);
+  }
+}
+
+function renderAdminCatList(){
+  const el = document.getElementById('adminCatList');
+  const tipLabels = { satis:'Satış', tahsilat:'Tahsilat', odeme:'Ödeme', masraf:'Masraf' };
+  const all = [];
+  for (const tip of ['satis','tahsilat','odeme','masraf']){
+    for (const m of SECTIONS[tip].methods){
+      if (m.custom) all.push({ tip, ...m });
+    }
+  }
+  if (!all.length){ el.innerHTML = '<div class="empty">Henüz özel kategori eklenmedi.</div>'; return; }
+  el.innerHTML = '';
+  for (const c of all){
+    const row = document.createElement('div');
+    row.className = 'admin-cat-row';
+    row.innerHTML = `
+      <span><span class="tip-badge">${tipLabels[c.tip]}</span>${escapeAttr(c.label)}</span>
+      <button class="icon-btn" title="Sil">✕</button>
+    `;
+    row.querySelector('button').onclick = () => deleteCategory(c.tip, c.key, c.catId);
+    el.appendChild(row);
+  }
+}
+
+async function loadAdminUsers(){
+  const el = document.getElementById('adminUserList');
+  const { data, error } = await sb.from('kullanicilar').select('*').order('created_at');
+  if (error){ el.innerHTML = '<div class="empty">Hata: ' + error.message + '</div>'; return; }
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">Kullanıcı yok.</div>'; return; }
+  el.innerHTML = '';
+  for (const u of data){
+    const row = document.createElement('div');
+    row.className = 'admin-cat-row';
+    row.innerHTML = `<span>${escapeAttr(u.ad_soyad)} <span style="color:var(--ink-dim);">(${escapeAttr(u.kullanici_adi)})</span></span><span style="color:var(--ink-dim);font-size:12px;">${u.aktif ? 'Aktif' : 'Pasif'}</span>`;
+    el.appendChild(row);
+  }
+}
+
+function loadAdminPanel(){
+  renderAdminCatList();
+  loadAdminUsers();
 }
 
 function updateCell(tip, key, idx, field, value){
