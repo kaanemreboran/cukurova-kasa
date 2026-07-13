@@ -152,6 +152,21 @@
   .grid{display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start;}
   @media (max-width:980px){.grid{grid-template-columns:1fr;}}
 
+  @media (max-width:760px){
+    .app-body{flex-direction:column;}
+    .side-nav{
+      width:100%;flex-direction:row;overflow-x:auto;padding:8px 10px;
+      border-right:none;border-bottom:1px solid var(--line);gap:6px;
+    }
+    .side-nav .side-label{display:none;}
+    .side-nav button{flex-shrink:0;padding:8px 12px;}
+    .userbox span, .userbox b{display:none;}
+    .userbox button{white-space:nowrap;}
+    header{padding:10px 12px;}
+    main{padding:12px;}
+    .toolbar{gap:8px;}
+  }
+
   .col-forms{display:flex;flex-direction:column;gap:16px;}
   .group-title{
     font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;
@@ -335,7 +350,7 @@
 
 <header>
   <div class="brand">
-    <span class="dot"></span>
+    <img src="cukurova-logo.png" style="width:32px;height:32px;object-fit:contain;border-radius:50%;">
     <div>
       <h1>ÇUKUROVA OTOMOTİV</h1>
       <span>Günlük Kasa Föyü</span>
@@ -1193,8 +1208,13 @@ function computeSummary(){
     .reduce((a,r) => a + (Number(r.tutar)||0), 0);
 
   // ---- MASRAFLAR ----
+  // Not: 'nakit' dışındaki tüm masraf kategorileri (banka + admin panelinden eklenen
+  // özel kategoriler) banka tarafı gideri olarak sayılır — böylece admin yeni bir
+  // masraf kategorisi eklediğinde otomatik olarak hesaplamaya dahil olur.
   const masrafNakit = sumRows('masraf','nakit');
-  const masrafBanka = sumRows('masraf','banka');
+  const masrafBanka = SECTIONS.masraf.methods
+    .filter(m => m.key !== 'nakit')
+    .reduce((a,m) => a + sumRows('masraf', m.key), 0);
 
   // ---- NAKİT KASA ----
   const nakitGiris = sumRows('satis','nakit') + sumRows('tahsilat','nakit');
@@ -1829,17 +1849,56 @@ function toast(msg, isErr){
    BOOT
    ============================================================ */
 /* ============================================================
-   ENTER = OTO KAYIT
+   ENTER TUŞU DAVRANIŞLARI
    ============================================================ */
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   const el = e.target;
   if (el.tagName !== 'INPUT') return;
+
+  // Giriş ekranı
+  if (el.closest('#loginPane')){
+    e.preventDefault();
+    doLogin();
+    return;
+  }
+  // Şifre değiştirme
+  if (el.closest('#passwordOverlay')){
+    e.preventDefault();
+    changePassword();
+    return;
+  }
+  // Admin — yeni kategori ekle
+  if (el.id === 'adminEtiket'){
+    e.preventDefault();
+    addCategory();
+    return;
+  }
+  // Admin — yeni kullanıcı ekle
+  if (['adminUserAdSoyad','adminUserUsername','adminUserPassword'].includes(el.id)){
+    e.preventDefault();
+    adminAddUser();
+    return;
+  }
+  // Fiş — ürün satırı: Enter'a basınca yeni satır aç (hızlı art arda ürün girişi)
+  if (el.closest('#fisRowsBody')){
+    e.preventDefault();
+    addFisRow();
+    // yeni eklenen satırın ilk hücresine odaklan
+    setTimeout(() => {
+      const rows = document.querySelectorAll('#fisRowsBody tr');
+      const last = rows[rows.length - 1];
+      if (last) last.querySelector('input')?.focus();
+    }, 0);
+    return;
+  }
+  // Föy formu — tüm föyü kaydet (mevcut davranış)
   const inForms = el.closest('#formsContainer, #summaryContainer');
-  if (!inForms) return;
-  e.preventDefault();
-  el.blur();
-  saveFoy();
+  if (inForms){
+    e.preventDefault();
+    el.blur();
+    saveFoy();
+  }
 });
 
 initTheme();
