@@ -470,7 +470,7 @@ function renderCard(tip, method){
 
   const head = document.createElement('div');
   head.className = 'card-head';
-  head.innerHTML = `<h3>${method.label}</h3><span class="toplam">Toplam: <b>${fmt(total)}</b></span>`;
+  head.innerHTML = `<h3>${method.label}</h3><span class="toplam">Toplam: <b id="total-${tip}-${method.key}">${fmt(total)}</b></span>`;
   card.appendChild(head);
 
   const body = document.createElement('div');
@@ -523,14 +523,15 @@ function removeRow(tip, key, idx){
 function updateCell(tip, key, idx, field, value){
   const row = state[tip][key][idx];
   if (field === 'kod' || field === 'ad') row[field] = value;
-  else row[field] = value === '' ? (field==='hesaba_gecen'?0:0) : Number(value);
-  // live update totals without full re-render (keeps input focus)
-  renderSummary();
+  else row[field] = value === '' ? 0 : Number(value);
+  // live update totals in place — do NOT re-render the form (would steal input focus)
   updateCardTotal(tip, key);
+  renderSummary();
 }
 function updateCardTotal(tip, key){
-  // recompute just the visible total badge for this card without full re-render
-  render(); // simplicity over micro-optimization; state is small
+  const total = sumRows(tip, key);
+  const el = document.getElementById(`total-${tip}-${key}`);
+  if (el) el.textContent = fmt(total);
 }
 
 function escapeAttr(v){
