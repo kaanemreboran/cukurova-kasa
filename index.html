@@ -249,10 +249,25 @@
 
 <div id="loginOverlay" class="login-overlay hidden">
   <div class="login-box">
-    <h2>Kasa Föyü</h2>
-    <p>Devam etmek için adını gir. Kaydettiğin işlemlerde bu isim görünecek.</p>
-    <input id="loginName" type="text" placeholder="Ad Soyad">
-    <button class="btn" onclick="doLogin()">Devam Et</button>
+    <div id="loginPane">
+      <h2>Kasa Föyü</h2>
+      <p>Kullanıcı adın ve şifrenle giriş yap.</p>
+      <input id="loginUsername" type="text" placeholder="Kullanıcı Adı" autocomplete="username">
+      <input id="loginPassword" type="password" placeholder="Şifre" autocomplete="current-password">
+      <div id="loginErr" style="color:var(--red);font-size:12px;margin:-4px 0 10px;display:none;"></div>
+      <button class="btn" id="loginBtn" onclick="doLogin()">Giriş Yap</button>
+      <p style="text-align:center;margin-top:12px;"><a href="#" style="color:var(--indigo-light);font-size:12.5px;" onclick="showRegisterPane();return false;">Yeni kullanıcı oluştur</a></p>
+    </div>
+    <div id="registerPane" class="hidden">
+      <h2>Yeni Kullanıcı</h2>
+      <p>Adını, kullanıcı adını ve bir şifre belirle.</p>
+      <input id="regAdSoyad" type="text" placeholder="Ad Soyad">
+      <input id="regUsername" type="text" placeholder="Kullanıcı Adı" autocomplete="username">
+      <input id="regPassword" type="password" placeholder="Şifre" autocomplete="new-password">
+      <div id="regErr" style="color:var(--red);font-size:12px;margin:-4px 0 10px;display:none;"></div>
+      <button class="btn" id="regBtn" onclick="doRegister()">Hesap Oluştur ve Giriş Yap</button>
+      <p style="text-align:center;margin-top:12px;"><a href="#" style="color:var(--indigo-light);font-size:12.5px;" onclick="showLoginPane();return false;">Zaten hesabım var</a></p>
+    </div>
   </div>
 </div>
 
@@ -274,6 +289,7 @@
 <nav class="tabs">
   <button id="tabBtnFoy" class="active" onclick="switchTab('foy')">Bugünkü Föy</button>
   <button id="tabBtnGecmis" onclick="switchTab('gecmis')">Geçmiş Föyler</button>
+  <button id="tabBtnHareketler" onclick="switchTab('hareketler')">Hareketler</button>
 </nav>
 
 <main>
@@ -316,6 +332,21 @@
     </div>
   </section>
 
+  <!-- ===================== HAREKETLER (İŞLEM GÜNLÜĞÜ) TAB ===================== -->
+  <section id="tabHareketler" class="hidden">
+    <div class="toolbar">
+      <label>Tarih</label>
+      <input type="date" id="logFiltTarih">
+      <label>Kullanıcı</label>
+      <select id="logFiltKullanici"><option value="">Tümü</option></select>
+      <button class="btn ghost" onclick="loadLog()">Filtrele</button>
+      <div class="spacer"></div>
+    </div>
+    <div class="history-list" id="logList">
+      <div class="empty">Yükleniyor…</div>
+    </div>
+  </section>
+
 </main>
 
 <div class="toast" id="toast"></div>
@@ -349,7 +380,7 @@ const SECTIONS = {
       { key: 'nakit',        label: 'Nakit Satış',                  hesabaGecen: false },
       { key: 'vakif_kredi',  label: 'Vakıfbank Kredi Kartı Satış',  hesabaGecen: true, commission: vakifNet, commissionLabel: '%1.57 komisyon' },
       { key: 'ykb_kredi',    label: 'Yapı Kredi Kart Satış',        hesabaGecen: true, commission: ykbNet,   commissionLabel: '%3.14 komisyon' },
-      { key: 'mailorder',    label: 'Mail Order Satış',             hesabaGecen: false },
+      { key: 'mailorder',    label: 'Mail Order Satış',             hesabaGecen: false, bayiPassthrough: true },
       { key: 'vakif_havale', label: 'Vakıfbank Havale Satış',       hesabaGecen: false },
       { key: 'ykb_havale',   label: 'YKB Havale Satış',             hesabaGecen: false },
     ]
@@ -376,8 +407,18 @@ const SECTIONS = {
       { key: 'vakif_havale', label: 'Vakıfbank Havale Ödeme', hesabaGecen: false },
       { key: 'ykb_havale',   label: 'YKB Havale Ödeme',        hesabaGecen: false },
     ]
+  },
+  masraf: {
+    title: 'MASRAFLAR',
+    kodLabel: null, adLabel: 'Açıklama',
+    methods: [
+      { key: 'nakit', label: 'Nakit Masraf', hesabaGecen: false },
+      { key: 'banka', label: 'Banka Masrafı', hesabaGecen: false },
+    ]
   }
 };
+
+
 
 /* ============================================================
    STATE
@@ -386,10 +427,11 @@ let state = null;      // current föy state object
 let foyId = null;      // existing kasa_foyleri.id (null = not yet saved)
 let foyExists = false;
 let currentUser = localStorage.getItem('kasa_user') || '';
+let currentUsername = localStorage.getItem('kasa_username') || '';
 
 function blankState(tarih){
-  const s = { tarih, nakit_devir:0, vakif_devir:0, ykb_devir:0, kasa_mevcut:'', satis:{}, tahsilat:{}, odeme:{} };
-  for (const tip of ['satis','tahsilat','odeme']){
+  const s = { tarih, nakit_devir:0, vakif_devir:0, ykb_devir:0, kasa_mevcut:'', satis:{}, tahsilat:{}, odeme:{}, masraf:{} };
+  for (const tip of ['satis','tahsilat','odeme','masraf']){
     for (const m of SECTIONS[tip].methods){
       s[tip][m.key] = [];
     }
@@ -398,7 +440,7 @@ function blankState(tarih){
 }
 
 function newRow(hasHesabaGecen){
-  return { kod:'', ad:'', tutar:0, hesaba_gecen: hasHesabaGecen ? 0 : null, _id: Math.random().toString(36).slice(2) };
+  return { kod:'', ad:'', tutar:0, hesaba_gecen: hasHesabaGecen ? 0 : null, bayiye_direkt:false, bayi_adi:'', _id: Math.random().toString(36).slice(2) };
 }
 
 /* ============================================================
@@ -426,19 +468,97 @@ function initTheme(){
 }
 
 /* ============================================================
-   AUTH (basit isim girişi — RLS şirket içi kullanım için açık)
+   AUTH — kayıtlı kullanıcı adı + şifre (SHA-256 hash, RLS şirket içi açık)
    ============================================================ */
-function doLogin(){
-  const val = document.getElementById('loginName').value.trim();
-  if (!val){ toast('Lütfen adını gir', true); return; }
-  currentUser = val;
-  localStorage.setItem('kasa_user', val);
-  document.getElementById('loginOverlay').classList.add('hidden');
-  document.getElementById('currentUserLabel').textContent = currentUser;
-  init();
+async function sha256Hex(str){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
 }
+
+function showRegisterPane(){
+  document.getElementById('loginPane').classList.add('hidden');
+  document.getElementById('registerPane').classList.remove('hidden');
+}
+function showLoginPane(){
+  document.getElementById('registerPane').classList.add('hidden');
+  document.getElementById('loginPane').classList.remove('hidden');
+}
+function showAuthErr(id, msg){
+  const el = document.getElementById(id);
+  el.textContent = msg; el.style.display = 'block';
+}
+function hideAuthErr(id){
+  document.getElementById(id).style.display = 'none';
+}
+
+async function doLogin(){
+  hideAuthErr('loginErr');
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!username || !password){ showAuthErr('loginErr','Kullanıcı adı ve şifre gerekli'); return; }
+
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true; btn.textContent = 'Giriş yapılıyor…';
+  try{
+    const hash = await sha256Hex(password);
+    const { data, error } = await sb.from('kullanicilar')
+      .select('*').eq('kullanici_adi', username).eq('aktif', true).maybeSingle();
+    if (error) throw error;
+    if (!data || data.sifre_hash !== hash){
+      showAuthErr('loginErr','Kullanıcı adı veya şifre hatalı');
+      return;
+    }
+    currentUser = data.ad_soyad;
+    currentUsername = data.kullanici_adi;
+    localStorage.setItem('kasa_user', currentUser);
+    localStorage.setItem('kasa_username', currentUsername);
+    document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('currentUserLabel').textContent = currentUser;
+    init();
+  } catch(err){
+    showAuthErr('loginErr', 'Giriş hatası: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Giriş Yap';
+  }
+}
+
+async function doRegister(){
+  hideAuthErr('regErr');
+  const adSoyad = document.getElementById('regAdSoyad').value.trim();
+  const username = document.getElementById('regUsername').value.trim();
+  const password = document.getElementById('regPassword').value;
+  if (!adSoyad || !username || !password){ showAuthErr('regErr','Tüm alanları doldur'); return; }
+  if (password.length < 4){ showAuthErr('regErr','Şifre en az 4 karakter olmalı'); return; }
+
+  const btn = document.getElementById('regBtn');
+  btn.disabled = true; btn.textContent = 'Oluşturuluyor…';
+  try{
+    const { data: existing } = await sb.from('kullanicilar').select('id').eq('kullanici_adi', username).maybeSingle();
+    if (existing){ showAuthErr('regErr','Bu kullanıcı adı zaten alınmış'); return; }
+
+    const hash = await sha256Hex(password);
+    const { data, error } = await sb.from('kullanicilar')
+      .insert({ kullanici_adi: username, sifre_hash: hash, ad_soyad: adSoyad })
+      .select().single();
+    if (error) throw error;
+
+    currentUser = data.ad_soyad;
+    currentUsername = data.kullanici_adi;
+    localStorage.setItem('kasa_user', currentUser);
+    localStorage.setItem('kasa_username', currentUsername);
+    document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('currentUserLabel').textContent = currentUser;
+    init();
+  } catch(err){
+    showAuthErr('regErr', 'Kayıt hatası: ' + err.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Hesap Oluştur ve Giriş Yap';
+  }
+}
+
 function doLogout(){
   localStorage.removeItem('kasa_user');
+  localStorage.removeItem('kasa_username');
   location.reload();
 }
 function checkLogin(){
@@ -456,9 +576,12 @@ function checkLogin(){
 function switchTab(tab){
   document.getElementById('tabFoy').classList.toggle('hidden', tab !== 'foy');
   document.getElementById('tabGecmis').classList.toggle('hidden', tab !== 'gecmis');
+  document.getElementById('tabHareketler').classList.toggle('hidden', tab !== 'hareketler');
   document.getElementById('tabBtnFoy').classList.toggle('active', tab === 'foy');
   document.getElementById('tabBtnGecmis').classList.toggle('active', tab === 'gecmis');
+  document.getElementById('tabBtnHareketler').classList.toggle('active', tab === 'hareketler');
   if (tab === 'gecmis') loadHistory();
+  if (tab === 'hareketler') loadLog();
 }
 
 /* ============================================================
@@ -512,7 +635,7 @@ async function loadFoyForDate(force){
     for (const h of (hareketler||[])){
       const bucket = state[h.islem_tipi] && state[h.islem_tipi][h.odeme_yontemi];
       if (bucket){
-        bucket.push({ kod:h.kod||'', ad:h.ad||'', tutar:Number(h.tutar)||0, hesaba_gecen: h.hesaba_gecen===null?null:Number(h.hesaba_gecen), _id: h.id });
+        bucket.push({ kod:h.kod||'', ad:h.ad||'', tutar:Number(h.tutar)||0, hesaba_gecen: h.hesaba_gecen===null?null:Number(h.hesaba_gecen), bayiye_direkt: !!h.bayiye_direkt, bayi_adi: h.bayi_adi||'', _id: h.id });
       }
     }
   }
@@ -552,7 +675,7 @@ function groupTotal(tip){
 function render(){
   const container = document.getElementById('formsContainer');
   container.innerHTML = '';
-  for (const tip of ['satis','tahsilat','odeme']){
+  for (const tip of ['satis','tahsilat','odeme','masraf']){
     const isOpen = groupOpen[tip] !== false;
 
     const header = document.createElement('div');
@@ -583,6 +706,8 @@ function renderCard(tip, method){
   const cfg = SECTIONS[tip];
   const rows = state[tip][method.key];
   const total = rows.reduce((a,r)=>a + (Number(r.tutar)||0), 0);
+  const showKod = !!cfg.kodLabel;
+  const showBayi = !!method.bayiPassthrough;
 
   const card = document.createElement('div');
   card.className = 'card';
@@ -598,13 +723,21 @@ function renderCard(tip, method){
   const body = document.createElement('div');
   body.className = 'card-body';
 
+  if (showBayi){
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:11.5px;color:var(--ink-dim);padding:2px 6px 8px;';
+    note.textContent = '"Bayiye Direkt" işaretlenen satırlar, tutarı otomatik olarak ödeme tarafından düşer (net kasa etkisi sıfır) ve Mail Order özetinde ayrı gösterilir.';
+    body.appendChild(note);
+  }
+
   if (rows.length){
     const table = document.createElement('table');
     table.innerHTML = `<thead><tr>
-      <th style="width:20%">${cfg.kodLabel}</th>
+      ${showKod ? `<th style="width:18%">${cfg.kodLabel}</th>` : ''}
       <th>${cfg.adLabel}</th>
-      <th style="width:16%">Tutar</th>
-      ${method.hesabaGecen ? '<th style="width:16%">Hesaba Geçen</th>' : ''}
+      <th style="width:14%">Tutar</th>
+      ${method.hesabaGecen ? '<th style="width:14%">Hesaba Geçen</th>' : ''}
+      ${showBayi ? '<th style="width:11%">Bayiye Direkt</th><th style="width:16%">Bayi Adı</th>' : ''}
       <th class="action-col"></th>
     </tr></thead>`;
     const tbody = document.createElement('tbody');
@@ -612,10 +745,14 @@ function renderCard(tip, method){
       const tr = document.createElement('tr');
       tr.className = 'row-line';
       tr.innerHTML = `
-        <td><input type="text" value="${escapeAttr(row.kod)}" oninput="updateCell('${tip}','${method.key}',${idx},'kod',this.value)"></td>
+        ${showKod ? `<td><input type="text" value="${escapeAttr(row.kod)}" oninput="updateCell('${tip}','${method.key}',${idx},'kod',this.value)"></td>` : ''}
         <td><input type="text" value="${escapeAttr(row.ad)}" oninput="updateCell('${tip}','${method.key}',${idx},'ad',this.value)"></td>
         <td class="tutar-col"><input type="number" step="0.01" value="${row.tutar}" oninput="updateCell('${tip}','${method.key}',${idx},'tutar',this.value)"></td>
         ${method.hesabaGecen ? `<td class="tutar-col"><span id="hg-${tip}-${method.key}-${idx}" style="color:var(--ink-dim);font-variant-numeric:tabular-nums;">${fmt(row.hesaba_gecen ?? 0)}</span></td>` : ''}
+        ${showBayi ? `
+          <td style="text-align:center;"><input type="checkbox" ${row.bayiye_direkt ? 'checked' : ''} onchange="updateCellBool('${tip}','${method.key}',${idx},'bayiye_direkt',this.checked)" style="width:16px;height:16px;"></td>
+          <td><input type="text" placeholder="Bayi adı" value="${escapeAttr(row.bayi_adi)}" oninput="updateCell('${tip}','${method.key}',${idx},'bayi_adi',this.value)"></td>
+        ` : ''}
         <td class="action-col"><button class="icon-btn" onclick="removeRow('${tip}','${method.key}',${idx})">✕</button></td>
       `;
       tbody.appendChild(tr);
@@ -648,7 +785,7 @@ function findMethod(tip, key){
 
 function updateCell(tip, key, idx, field, value){
   const row = state[tip][key][idx];
-  if (field === 'kod' || field === 'ad') row[field] = value;
+  if (field === 'kod' || field === 'ad' || field === 'bayi_adi') row[field] = value;
   else row[field] = value === '' ? 0 : Number(value);
 
   const method = findMethod(tip, key);
@@ -660,7 +797,11 @@ function updateCell(tip, key, idx, field, value){
 
   // live update totals in place — do NOT re-render the form (would steal input focus)
   updateCardTotal(tip, key);
-  renderSummary();
+  renderSummarySoft();
+}
+function updateCellBool(tip, key, idx, field, checked){
+  state[tip][key][idx][field] = checked;
+  renderSummarySoft();
 }
 function updateCardTotal(tip, key){
   const total = sumRows(tip, key);
@@ -691,9 +832,20 @@ function sumHesabaGecen(tip, key){
 function computeSummary(){
   const s = state;
 
+  // ---- BAYİYE DİREKT AKTARILAN (mail order pass-through) ----
+  // Müşteriden alınan mail order tutarı hiç kasaya girmeden doğrudan parça bayisine gidiyor.
+  // Satış tarafında tam giriliyor, burada hesaplanan tutar otomatik "ödeme" gibi düşülüyor.
+  const bayiyeAktarilanToplam = (state.satis.mailorder || [])
+    .filter(r => r.bayiye_direkt)
+    .reduce((a,r) => a + (Number(r.tutar)||0), 0);
+
+  // ---- MASRAFLAR ----
+  const masrafNakit = sumRows('masraf','nakit');
+  const masrafBanka = sumRows('masraf','banka');
+
   // ---- NAKİT KASA ----
   const nakitGiris = sumRows('satis','nakit') + sumRows('tahsilat','nakit');
-  const nakitCikis = sumRows('odeme','nakit');
+  const nakitCikis = sumRows('odeme','nakit') + masrafNakit;
   const nakitDurum = Number(s.nakit_devir||0) + nakitGiris - nakitCikis;
   const kasaMevcut = s.kasa_mevcut === '' ? null : Number(s.kasa_mevcut);
   const fark = kasaMevcut === null ? null : (kasaMevcut - nakitDurum);
@@ -714,7 +866,9 @@ function computeSummary(){
   const mailorderSatisTutar = sumRows('satis','mailorder');
   const mailorderTahsilatTutar = sumRows('tahsilat','mailorder');
   const mailorderSatisToplam = mailorderSatisTutar + mailorderTahsilatTutar; // Excel Q20 mantığı (satış+tahsilat)
-  const mailorderOdemeToplam = sumRows('odeme','mailorder');
+  const mailorderOdemeManuel = sumRows('odeme','mailorder');
+  const mailorderOdemeToplam = mailorderOdemeManuel + bayiyeAktarilanToplam;
+  const mailorderNetKasaEtkisi = mailorderSatisToplam - mailorderOdemeToplam;
 
   // ---- BANKA HAREKETLERİ ----
   const bankaDevir = Number(s.vakif_devir||0) + Number(s.ykb_devir||0);
@@ -731,17 +885,18 @@ function computeSummary(){
   // Excel Q39: sadece devir + havale hareketi — kart satışları dahil değil.
   const ykbGuncelDurum = Number(s.ykb_devir||0) + ykbGunHareket;
 
-  const bankalarGuncelDurum = vakifGuncelDurum + ykbGuncelDurum;
+  const bankalarGuncelDurum = vakifGuncelDurum + ykbGuncelDurum - masrafBanka;
   const bankaToplam = bankaDevir; // gün başı banka toplamı (devir)
 
   return {
     nakitGiris, nakitCikis, nakitDurum, kasaMevcut, fark,
     vakifbankToplamSatis, ykbToplamSatis, toplamKrediliSatis,
-    mailorderSatisTutar, mailorderTahsilatTutar, mailorderSatisToplam, mailorderOdemeToplam,
+    mailorderSatisTutar, mailorderTahsilatTutar, mailorderSatisToplam,
+    mailorderOdemeManuel, bayiyeAktarilanToplam, mailorderOdemeToplam, mailorderNetKasaEtkisi,
     bankaDevir, bankaToplam,
     vakifGelenHavale, vakifGidenHavale, vakifGunHareket, vakifGuncelDurum,
     ykbGelenHavale, ykbGidenHavale, ykbGunHareket, ykbGuncelDurum,
-    bankalarGuncelDurum
+    bankalarGuncelDurum, masrafNakit, masrafBanka
   };
 }
 
@@ -752,57 +907,106 @@ function renderSummary(){
     <div class="sum-card">
       <div class="sum-head">Nakit Kasa</div>
       <div class="sum-body">
-        <div class="sum-row"><span>Dünden Devir</span><input type="number" step="0.01" value="${state.nakit_devir}" oninput="state.nakit_devir=Number(this.value)||0; renderSummary();"></div>
-        <div class="sum-row"><span>Nakit Giriş</span><b>${fmt(r.nakitGiris)}</b></div>
-        <div class="sum-row"><span>Nakit Çıkış</span><b>${fmt(r.nakitCikis)}</b></div>
-        <div class="sum-row total"><span>Nakit Durum</span><b>${fmt(r.nakitDurum)}</b></div>
-        <div class="sum-row"><span>Kasa Mevcut (sayım)</span><input type="number" step="0.01" value="${state.kasa_mevcut}" oninput="state.kasa_mevcut = this.value===''?'':Number(this.value); renderSummary();"></div>
-        <div class="sum-row total ${r.fark===null?'':(Math.abs(r.fark)<0.01?'fark-ok':'fark-bad')}"><span>Fark</span><b>${r.fark===null?'—':fmt(r.fark)}</b></div>
+        <div class="sum-row"><span>Dünden Devir</span><input type="number" step="0.01" value="${state.nakit_devir}" oninput="state.nakit_devir=Number(this.value)||0; renderSummarySoft();"></div>
+        <div class="sum-row"><span>Nakit Giriş</span><b id="s-nakitGiris">${fmt(r.nakitGiris)}</b></div>
+        <div class="sum-row"><span>Nakit Çıkış</span><b id="s-nakitCikis">${fmt(r.nakitCikis)}</b></div>
+        <div class="sum-row total"><span>Nakit Durum</span><b id="s-nakitDurum">${fmt(r.nakitDurum)}</b></div>
+        <div class="sum-row"><span>Kasa Mevcut (sayım)</span><input type="number" step="0.01" value="${state.kasa_mevcut}" oninput="state.kasa_mevcut = this.value===''?'':Number(this.value); renderSummarySoft();"></div>
+        <div class="sum-row total" id="s-fark-row"><span>Fark</span><b id="s-fark">${r.fark===null?'—':fmt(r.fark)}</b></div>
       </div>
     </div>
 
     <div class="sum-card">
       <div class="sum-head">Kredi Kasa</div>
       <div class="sum-body">
-        <div class="sum-row"><span>Vakıfbank Toplam (satış+tahsilat, net)</span><b>${fmt(r.vakifbankToplamSatis)}</b></div>
-        <div class="sum-row"><span>YKB Toplam (satış+tahsilat, net)</span><b>${fmt(r.ykbToplamSatis)}</b></div>
-        <div class="sum-row total"><span>Toplam Kredili Satış</span><b>${fmt(r.toplamKrediliSatis)}</b></div>
+        <div class="sum-row"><span>Vakıfbank Toplam (satış+tahsilat, net)</span><b id="s-vakifToplam">${fmt(r.vakifbankToplamSatis)}</b></div>
+        <div class="sum-row"><span>YKB Toplam (satış+tahsilat, net)</span><b id="s-ykbToplam">${fmt(r.ykbToplamSatis)}</b></div>
+        <div class="sum-row total"><span>Toplam Kredili Satış</span><b id="s-toplamKredi">${fmt(r.toplamKrediliSatis)}</b></div>
       </div>
     </div>
 
     <div class="sum-card">
       <div class="sum-head">Mail Order Kasa</div>
       <div class="sum-body">
-        <div class="sum-row"><span>Satış Tutarı</span><b>${fmt(r.mailorderSatisTutar)}</b></div>
-        <div class="sum-row"><span>Tahsilat Tutarı</span><b>${fmt(r.mailorderTahsilatTutar)}</b></div>
-        <div class="sum-row total"><span>Satış+Tahsilat Toplam</span><b>${fmt(r.mailorderSatisToplam)}</b></div>
-        <div class="sum-row"><span>Ödeme Toplam</span><b>${fmt(r.mailorderOdemeToplam)}</b></div>
+        <div class="sum-row"><span>Satış Tutarı</span><b id="s-moSatis">${fmt(r.mailorderSatisTutar)}</b></div>
+        <div class="sum-row"><span>Tahsilat Tutarı</span><b id="s-moTahsilat">${fmt(r.mailorderTahsilatTutar)}</b></div>
+        <div class="sum-row total"><span>Satış+Tahsilat Toplam</span><b id="s-moToplam">${fmt(r.mailorderSatisToplam)}</b></div>
+        <div class="sum-row"><span>Ödeme (manuel)</span><b id="s-moOdemeManuel">${fmt(r.mailorderOdemeManuel)}</b></div>
+        <div class="sum-row"><span>Bayiye Direkt Aktarılan (oto)</span><b id="s-bayiAktarilan">${fmt(r.bayiyeAktarilanToplam)}</b></div>
+        <div class="sum-row total"><span>Ödeme Toplam</span><b id="s-moOdeme">${fmt(r.mailorderOdemeToplam)}</b></div>
+        <div class="sum-row total"><span>Net Kasa Etkisi</span><b id="s-moNet">${fmt(r.mailorderNetKasaEtkisi)}</b></div>
+      </div>
+    </div>
+
+    <div class="sum-card">
+      <div class="sum-head">Masraflar</div>
+      <div class="sum-body">
+        <div class="sum-row"><span>Nakit Masraf</span><b id="s-masrafNakit">${fmt(r.masrafNakit)}</b></div>
+        <div class="sum-row"><span>Banka Masrafı</span><b id="s-masrafBanka">${fmt(r.masrafBanka)}</b></div>
       </div>
     </div>
 
     <div class="sum-card">
       <div class="sum-head">Banka Hareketleri</div>
       <div class="sum-body">
-        <div class="sum-row"><span>Vakıfbank Devir</span><input type="number" step="0.01" value="${state.vakif_devir}" oninput="state.vakif_devir=Number(this.value)||0; renderSummary();"></div>
-        <div class="sum-row"><span>Yapı Kredi Devir</span><input type="number" step="0.01" value="${state.ykb_devir}" oninput="state.ykb_devir=Number(this.value)||0; renderSummary();"></div>
-        <div class="sum-row total"><span>Banka Devir Toplam</span><b>${fmt(r.bankaDevir)}</b></div>
+        <div class="sum-row"><span>Vakıfbank Devir</span><input type="number" step="0.01" value="${state.vakif_devir}" oninput="state.vakif_devir=Number(this.value)||0; renderSummarySoft();"></div>
+        <div class="sum-row"><span>Yapı Kredi Devir</span><input type="number" step="0.01" value="${state.ykb_devir}" oninput="state.ykb_devir=Number(this.value)||0; renderSummarySoft();"></div>
+        <div class="sum-row total"><span>Banka Devir Toplam</span><b id="s-bankaDevir">${fmt(r.bankaDevir)}</b></div>
 
         <div style="height:1px;background:var(--line);margin:4px 0;"></div>
-        <div class="sum-row"><span>Vakıf Gelen Havale</span><b>${fmt(r.vakifGelenHavale)}</b></div>
-        <div class="sum-row"><span>Vakıf Giden Havale</span><b>${fmt(r.vakifGidenHavale)}</b></div>
-        <div class="sum-row"><span>Vakıf Gün Hareket</span><b>${fmt(r.vakifGunHareket)}</b></div>
-        <div class="sum-row total"><span>Vakıf Güncel Durum</span><b>${fmt(r.vakifGuncelDurum)}</b></div>
+        <div class="sum-row"><span>Vakıf Gelen Havale</span><b id="s-vakifGelen">${fmt(r.vakifGelenHavale)}</b></div>
+        <div class="sum-row"><span>Vakıf Giden Havale</span><b id="s-vakifGiden">${fmt(r.vakifGidenHavale)}</b></div>
+        <div class="sum-row"><span>Vakıf Gün Hareket</span><b id="s-vakifHareket">${fmt(r.vakifGunHareket)}</b></div>
+        <div class="sum-row total"><span>Vakıf Güncel Durum</span><b id="s-vakifDurum">${fmt(r.vakifGuncelDurum)}</b></div>
 
         <div style="height:1px;background:var(--line);margin:4px 0;"></div>
-        <div class="sum-row"><span>YKB Gelen Havale</span><b>${fmt(r.ykbGelenHavale)}</b></div>
-        <div class="sum-row"><span>YKB Giden Havale</span><b>${fmt(r.ykbGidenHavale)}</b></div>
-        <div class="sum-row"><span>YKB Gün Hareket</span><b>${fmt(r.ykbGunHareket)}</b></div>
-        <div class="sum-row total"><span>YKB Güncel Durum</span><b>${fmt(r.ykbGuncelDurum)}</b></div>
+        <div class="sum-row"><span>YKB Gelen Havale</span><b id="s-ykbGelen">${fmt(r.ykbGelenHavale)}</b></div>
+        <div class="sum-row"><span>YKB Giden Havale</span><b id="s-ykbGiden">${fmt(r.ykbGidenHavale)}</b></div>
+        <div class="sum-row"><span>YKB Gün Hareket</span><b id="s-ykbHareket">${fmt(r.ykbGunHareket)}</b></div>
+        <div class="sum-row total"><span>YKB Güncel Durum</span><b id="s-ykbDurum">${fmt(r.ykbGuncelDurum)}</b></div>
 
-        <div class="sum-row total" style="margin-top:6px;"><span>Bankalar Güncel Durum</span><b>${fmt(r.bankalarGuncelDurum)}</b></div>
+        <div class="sum-row total" style="margin-top:6px;"><span>Bankalar Güncel Durum</span><b id="s-bankalarDurum">${fmt(r.bankalarGuncelDurum)}</b></div>
       </div>
     </div>
   `;
+}
+
+// Değerleri günceller ama DOM'u yeniden kurmaz — devir/kasa mevcut input'larının
+// focus'unu kaybetmeden her tuş vuruşunda toplamların canlı güncellenmesini sağlar.
+function renderSummarySoft(){
+  const r = computeSummary();
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  set('s-nakitGiris', fmt(r.nakitGiris));
+  set('s-nakitCikis', fmt(r.nakitCikis));
+  set('s-nakitDurum', fmt(r.nakitDurum));
+  set('s-fark', r.fark===null?'—':fmt(r.fark));
+  const farkRow = document.getElementById('s-fark-row');
+  if (farkRow){
+    farkRow.classList.remove('fark-ok','fark-bad');
+    if (r.fark !== null) farkRow.classList.add(Math.abs(r.fark) < 0.01 ? 'fark-ok' : 'fark-bad');
+  }
+  set('s-vakifToplam', fmt(r.vakifbankToplamSatis));
+  set('s-ykbToplam', fmt(r.ykbToplamSatis));
+  set('s-toplamKredi', fmt(r.toplamKrediliSatis));
+  set('s-moSatis', fmt(r.mailorderSatisTutar));
+  set('s-moTahsilat', fmt(r.mailorderTahsilatTutar));
+  set('s-moToplam', fmt(r.mailorderSatisToplam));
+  set('s-moOdemeManuel', fmt(r.mailorderOdemeManuel));
+  set('s-bayiAktarilan', fmt(r.bayiyeAktarilanToplam));
+  set('s-moOdeme', fmt(r.mailorderOdemeToplam));
+  set('s-moNet', fmt(r.mailorderNetKasaEtkisi));
+  set('s-masrafNakit', fmt(r.masrafNakit));
+  set('s-masrafBanka', fmt(r.masrafBanka));
+  set('s-bankaDevir', fmt(r.bankaDevir));
+  set('s-vakifGelen', fmt(r.vakifGelenHavale));
+  set('s-vakifGiden', fmt(r.vakifGidenHavale));
+  set('s-vakifHareket', fmt(r.vakifGunHareket));
+  set('s-vakifDurum', fmt(r.vakifGuncelDurum));
+  set('s-ykbGelen', fmt(r.ykbGelenHavale));
+  set('s-ykbGiden', fmt(r.ykbGidenHavale));
+  set('s-ykbHareket', fmt(r.ykbGunHareket));
+  set('s-ykbDurum', fmt(r.ykbGuncelDurum));
+  set('s-bankalarDurum', fmt(r.bankalarGuncelDurum));
 }
 
 /* ============================================================
@@ -823,6 +1027,7 @@ async function deleteFoy(){
     const { error } = await sb.from('kasa_foyleri').delete().eq('id', foyId);
     if (error) throw error;
     toast('Föy silindi ✓');
+    logAction(state.tarih, 'Föy silindi', null);
     foyId = null; foyExists = false;
     state = blankState(state.tarih);
     setStatus('yeni','Yeni Föy');
@@ -867,12 +1072,15 @@ async function saveFoy(){
       savedFoyId = data.id;
     }
 
-    // basit senkron stratejisi: bu föyün mevcut hareketlerini sil, state'i yeniden yaz
-    const { error: delErr } = await sb.from('kasa_hareketleri').delete().eq('foy_id', savedFoyId);
-    if (delErr) throw delErr;
+    // ÖNEMLİ: önce yeni satırları ekle, sadece başarılı olursa eski satırları sil.
+    // (Eskiden önce silinip sonra ekleniyordu — ekleme sırasında bir hata olursa
+    //  o günün tüm hareketleri kalıcı olarak kayboluyordu.)
+    const { data: oldRows, error: oldErr } = await sb.from('kasa_hareketleri').select('id').eq('foy_id', savedFoyId);
+    if (oldErr) throw oldErr;
+    const oldIds = (oldRows || []).map(r => r.id);
 
     const rowsToInsert = [];
-    for (const tip of ['satis','tahsilat','odeme']){
+    for (const tip of ['satis','tahsilat','odeme','masraf']){
       for (const m of SECTIONS[tip].methods){
         state[tip][m.key].forEach((row, idx) => {
           if (!row.kod && !row.ad && !row.tutar) return; // tamamen boş satırı kaydetme
@@ -884,19 +1092,28 @@ async function saveFoy(){
             kod: row.kod || null,
             ad: row.ad || null,
             tutar: Number(row.tutar)||0,
-            hesaba_gecen: m.hesabaGecen ? (Number(row.hesaba_gecen)||0) : null
+            hesaba_gecen: m.hesabaGecen ? (Number(row.hesaba_gecen)||0) : null,
+            bayiye_direkt: !!row.bayiye_direkt,
+            bayi_adi: row.bayi_adi || null
           });
         });
       }
     }
     if (rowsToInsert.length){
       const { error: insErr } = await sb.from('kasa_hareketleri').insert(rowsToInsert);
-      if (insErr) throw insErr;
+      if (insErr) throw insErr; // buradan çıkarsa eski satırlar hâlâ duruyor, veri kaybı yok
+    }
+    if (oldIds.length){
+      const { error: delErr } = await sb.from('kasa_hareketleri').delete().in('id', oldIds);
+      if (delErr) throw delErr; // silme başarısız olsa bile yeni satırlar zaten kayıtlı (tekrar kaydedince düzelir)
     }
 
     foyId = savedFoyId; foyExists = true;
     setStatus('acik','Açık');
     toast('Föy kaydedildi ✓');
+
+    const toplamTutar = rowsToInsert.reduce((a,r)=>a+(Number(r.tutar)||0), 0);
+    logAction(state.tarih, `Föy kaydedildi — ${rowsToInsert.length} satır, toplam ${fmt(toplamTutar)} ₺`, { satir_sayisi: rowsToInsert.length, toplam_tutar: toplamTutar });
   } catch(err){
     toast('Kaydetme hatası: ' + err.message, true);
   } finally {
@@ -944,6 +1161,7 @@ async function loadHistory(){
       const { error } = await sb.from('kasa_foyleri').delete().eq('id', foy.id);
       if (error){ toast('Silme hatası: ' + error.message, true); return; }
       toast('Föy silindi ✓');
+      logAction(foy.tarih, 'Föy silindi (geçmiş listesinden)', null);
       if (state && state.tarih === foy.tarih){ foyId = null; foyExists = false; updateDeleteBtnState(); }
       loadHistory();
     };
@@ -962,6 +1180,67 @@ function formatDateTR(iso){
 }
 
 /* ============================================================
+   HAREKETLER (İŞLEM GÜNLÜĞÜ) TAB
+   ============================================================ */
+let logUsersLoaded = false;
+async function loadLogUserFilter(){
+  if (logUsersLoaded) return;
+  const { data } = await sb.from('kullanicilar').select('ad_soyad').order('ad_soyad');
+  const sel = document.getElementById('logFiltKullanici');
+  (data||[]).forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.ad_soyad; opt.textContent = u.ad_soyad;
+    sel.appendChild(opt);
+  });
+  logUsersLoaded = true;
+}
+
+async function loadLog(){
+  await loadLogUserFilter();
+  const list = document.getElementById('logList');
+  list.innerHTML = '<div class="empty">Yükleniyor…</div>';
+
+  let q = sb.from('islem_gunlugu').select('*').order('islem_zamani', { ascending:false }).limit(150);
+  const tarih = document.getElementById('logFiltTarih').value;
+  const kullanici = document.getElementById('logFiltKullanici').value;
+  if (tarih) q = q.eq('foy_tarih', tarih);
+  if (kullanici) q = q.eq('kullanici_adi', kullanici);
+
+  const { data, error } = await q;
+  if (error){ list.innerHTML = '<div class="empty">Hata: ' + error.message + '</div>'; return; }
+  if (!data || !data.length){ list.innerHTML = '<div class="empty">Kayıt bulunamadı.</div>'; return; }
+
+  list.innerHTML = '';
+  for (const log of data){
+    const dt = new Date(log.islem_zamani);
+    const zaman = dt.toLocaleString('tr-TR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    div.style.cursor = 'default';
+    div.innerHTML = `
+      <div>
+        <div class="date" style="font-size:13.5px;">${log.kullanici_adi} <span style="font-weight:500;color:var(--ink-dim);">— ${formatDateTR(log.foy_tarih)} föyü</span></div>
+        <div class="meta">${zaman} · ${escapeAttr(log.ozet||'')}</div>
+      </div>
+    `;
+    list.appendChild(div);
+  }
+}
+
+async function logAction(foyTarih, ozet, detay){
+  try{
+    await sb.from('islem_gunlugu').insert({
+      foy_tarih: foyTarih,
+      kullanici_adi: currentUser,
+      ozet: ozet,
+      detay: detay || null
+    });
+  } catch(e){ /* günlük kaydı başarısız olsa da ana işlemi engellemez */ }
+}
+
+
+
+/* ============================================================
    TOAST
    ============================================================ */
 let toastTimer = null;
@@ -976,6 +1255,20 @@ function toast(msg, isErr){
 /* ============================================================
    BOOT
    ============================================================ */
+/* ============================================================
+   ENTER = OTO KAYIT
+   ============================================================ */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const el = e.target;
+  if (el.tagName !== 'INPUT') return;
+  const inForms = el.closest('#formsContainer, #summaryContainer');
+  if (!inForms) return;
+  e.preventDefault();
+  el.blur();
+  saveFoy();
+});
+
 initTheme();
 if (checkLogin()) init();
 </script>
