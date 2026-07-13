@@ -1,4 +1,4 @@
-const CACHE = 'kasa-foyu-v1';
+const CACHE = 'kasa-foyu-v2';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', (e) => {
@@ -13,7 +13,9 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Network-first for Supabase calls, cache-first for app shell
+// Supabase: her zaman ağdan (canlı veri).
+// Uygulama dosyaları (index.html, manifest, ikonlar): önce AĞDAN dene, güncelleme
+// gelsin diye — sadece internet yoksa önbellekten göster (offline yedek).
 self.addEventListener('fetch', (e) => {
   const url = e.request.url;
   if (url.includes('supabase.co')) {
@@ -21,6 +23,12 @@ self.addEventListener('fetch', (e) => {
     return;
   }
   e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request))
+    fetch(e.request)
+      .then((res) => {
+        const resClone = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, resClone));
+        return res;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
