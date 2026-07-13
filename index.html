@@ -287,6 +287,22 @@
   .login-box p{margin:0 0 16px;font-size:12.5px;color:var(--ink-dim);}
   .login-box input{width:100%;margin-bottom:10px;}
   .login-box button{width:100%;}
+
+  #printArea{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #printArea, #printArea *{visibility:visible;}
+    #printArea{display:block;position:absolute;top:0;left:0;width:100%;padding:20px;color:#000;background:#fff;}
+    #printArea h1{font-size:18px;margin:0 0 2px;}
+    #printArea h2{font-size:13px;margin:0 0 14px;color:#555;font-weight:600;}
+    #printArea table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:11.5px;}
+    #printArea th, #printArea td{border:1px solid #999;padding:4px 6px;text-align:left;}
+    #printArea th{background:#eee;}
+    #printArea .p-section-title{font-size:12.5px;font-weight:800;text-transform:uppercase;margin:16px 0 6px;letter-spacing:.4px;}
+    #printArea .p-summary{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;font-size:12px;margin-top:10px;}
+    #printArea .p-summary div{display:flex;justify-content:space-between;border-bottom:1px dotted #ccc;padding:2px 0;}
+    #printArea .p-summary b{font-weight:700;}
+  }
 </style>
 </head>
 <body>
@@ -358,6 +374,7 @@
       <div class="spacer"></div>
       <button class="btn ghost" onclick="loadFoyForDate(true)">Yeniden Yükle</button>
       <button class="btn danger" id="deleteBtn" onclick="deleteFoy()">Föyü Sil</button>
+      <button class="btn ghost" onclick="printFoy()">🖨️ Yazdır</button>
       <button class="btn" id="saveBtn" onclick="saveFoy()">Föyü Kaydet</button>
     </div>
 
@@ -435,6 +452,16 @@
     </div>
     <div class="admin-card">
       <h3>Kullanıcılar</h3>
+      <div class="toolbar" style="margin-bottom:14px;">
+        <label>Ad Soyad</label>
+        <input type="text" id="adminUserAdSoyad" placeholder="Ad Soyad" style="width:150px;">
+        <label>Kullanıcı Adı</label>
+        <input type="text" id="adminUserUsername" placeholder="kullanici_adi" style="width:130px;">
+        <label>Şifre</label>
+        <input type="password" id="adminUserPassword" placeholder="Şifre" style="width:120px;">
+        <button class="btn" onclick="adminAddUser()">Kullanıcı Ekle</button>
+      </div>
+      <div id="adminUserErr" style="color:var(--red);font-size:12px;margin:-8px 0 10px;display:none;"></div>
       <div id="adminUserList"><div class="empty">Yükleniyor…</div></div>
     </div>
   </section>
@@ -455,6 +482,8 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<div id="printArea"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script>
@@ -851,8 +880,8 @@ function renderCard(tip, method){
   const head = document.createElement('div');
   head.className = 'card-head';
   const titleHtml = method.commissionLabel
-    ? `<h3>${method.label} <span style="font-weight:500;color:var(--ink-dim);font-size:11px;">(${method.commissionLabel}, otomatik)</span></h3>`
-    : `<h3>${method.label}</h3>`;
+    ? `<h3 style="display:flex;align-items:center;">${colorDot(method.key)}${method.label} <span style="font-weight:500;color:var(--ink-dim);font-size:11px;margin-left:4px;">(${method.commissionLabel}, otomatik)</span></h3>`
+    : `<h3 style="display:flex;align-items:center;">${colorDot(method.key)}${method.label}</h3>`;
   head.innerHTML = `${titleHtml}<span class="toplam">Toplam: <b id="total-${tip}-${method.key}">${fmt(total)}</b></span>`;
   card.appendChild(head);
 
@@ -999,6 +1028,41 @@ function renderAdminCatList(){
   }
 }
 
+async function adminAddUser(){
+  const errEl = 'adminUserErr';
+  const el = (id) => document.getElementById(id);
+  el(errEl).style.display = 'none';
+
+  const adSoyad = el('adminUserAdSoyad').value.trim();
+  const username = el('adminUserUsername').value.trim();
+  const password = el('adminUserPassword').value;
+  if (!adSoyad || !username || !password){ el(errEl).textContent = 'Tüm alanları doldur'; el(errEl).style.display = 'block'; return; }
+  if (password.length < 4){ el(errEl).textContent = 'Şifre en az 4 karakter olmalı'; el(errEl).style.display = 'block'; return; }
+
+  try{
+    const { data: existing } = await sb.from('kullanicilar').select('id').eq('kullanici_adi', username).maybeSingle();
+    if (existing){ el(errEl).textContent = 'Bu kullanıcı adı zaten alınmış'; el(errEl).style.display = 'block'; return; }
+
+    const hash = await sha256Hex(password);
+    const { error } = await sb.from('kullanicilar').insert({ kullanici_adi: username, sifre_hash: hash, ad_soyad: adSoyad });
+    if (error) throw error;
+
+    el('adminUserAdSoyad').value = '';
+    el('adminUserUsername').value = '';
+    el('adminUserPassword').value = '';
+    toast('Kullanıcı eklendi ✓');
+    loadAdminUsers();
+  } catch(err){
+    el(errEl).textContent = 'Hata: ' + err.message; el(errEl).style.display = 'block';
+  }
+}
+
+async function adminToggleUser(id, aktif){
+  const { error } = await sb.from('kullanicilar').update({ aktif: !aktif }).eq('id', id);
+  if (error){ toast('Hata: ' + error.message, true); return; }
+  loadAdminUsers();
+}
+
 async function loadAdminUsers(){
   const el = document.getElementById('adminUserList');
   const { data, error } = await sb.from('kullanicilar').select('*').order('created_at');
@@ -1008,7 +1072,11 @@ async function loadAdminUsers(){
   for (const u of data){
     const row = document.createElement('div');
     row.className = 'admin-cat-row';
-    row.innerHTML = `<span>${escapeAttr(u.ad_soyad)} <span style="color:var(--ink-dim);">(${escapeAttr(u.kullanici_adi)})</span></span><span style="color:var(--ink-dim);font-size:12px;">${u.aktif ? 'Aktif' : 'Pasif'}</span>`;
+    row.innerHTML = `
+      <span>${escapeAttr(u.ad_soyad)} <span style="color:var(--ink-dim);">(${escapeAttr(u.kullanici_adi)})</span></span>
+      <button class="btn ghost" style="padding:4px 10px;font-size:11.5px;">${u.aktif ? 'Aktif — Pasifleştir' : 'Pasif — Etkinleştir'}</button>
+    `;
+    row.querySelector('button').onclick = () => adminToggleUser(u.id, u.aktif);
     el.appendChild(row);
   }
 }
@@ -1044,6 +1112,18 @@ function updateCardTotal(tip, key){
   if (el) el.textContent = fmt(total);
   const gEl = document.getElementById(`group-total-${tip}`);
   if (gEl) gEl.textContent = fmt(groupTotal(tip));
+}
+
+// Ödeme yöntemine göre renkli ayırt edici nokta — Nakit/Kart/Havale/Mail Order/Masraf görsel olarak ayrılsın.
+function methodColor(key){
+  if (key === 'nakit') return '#22c55e';                                   // yeşil — nakit
+  if (key === 'kredi_karti' || key.includes('kredi')) return '#f59e0b';    // amber — kart
+  if (key.includes('havale') || key === 'banka') return '#3b82f6';         // mavi — banka/havale
+  if (key === 'mailorder') return '#a855f7';                               // mor — mail order
+  return '#94a3b8';                                                        // gri — özel/diğer
+}
+function colorDot(key){
+  return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${methodColor(key)};margin-right:7px;flex-shrink:0;"></span>`;
 }
 
 function escapeAttr(v){
@@ -1160,7 +1240,7 @@ function buildMasrafMiniList(tip, method){
   const rows = state[tip][method.key];
   const total = sumRows(tip, method.key);
   const wrap = document.createElement('div');
-  wrap.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;"><span>${method.label}</span><span id="total-${tip}-${method.key}">${fmt(total)}</span></div>`;
+  wrap.innerHTML = `<div style="display:flex;justify-content:space-between;font-size:11.5px;font-weight:700;color:var(--ink-dim);text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;"><span style="display:flex;align-items:center;">${colorDot(method.key)}${method.label}</span><span id="total-${tip}-${method.key}">${fmt(total)}</span></div>`;
   rows.forEach((row, idx) => {
     const line = document.createElement('div');
     line.style.cssText = 'display:flex;gap:4px;margin-bottom:5px;align-items:center;';
@@ -1319,6 +1399,54 @@ function updateDeleteBtnState(){
 /* ============================================================
    SAVE
    ============================================================ */
+/* ============================================================
+   YAZDIR (FÖY ÇIKTISI)
+   ============================================================ */
+function printFoy(){
+  const r = computeSummary();
+  const tipLabels = { satis:'Satışlar', tahsilat:'Tahsilatlar', odeme:'Ödemeler', masraf:'Masraflar' };
+  let html = `
+    <h1>ÇUKUROVA OTOMOTİV</h1>
+    <h2>Günlük Kasa Föyü — ${formatDateTR(state.tarih)} ${foyExists ? '' : '(henüz kaydedilmedi)'} ${currentUser ? '· Hazırlayan: ' + escapeAttr(currentUser) : ''}</h2>
+  `;
+
+  for (const tip of ['satis','tahsilat','odeme','masraf']){
+    const cfg = SECTIONS[tip];
+    for (const m of cfg.methods){
+      const rows = (state[tip][m.key] || []).filter(row => row.kod || row.ad || row.tutar);
+      if (!rows.length) continue;
+      const total = rows.reduce((a,row)=>a+(Number(row.tutar)||0),0);
+      html += `<div class="p-section-title">${tipLabels[tip]} — ${escapeAttr(m.label)} (Toplam: ${fmt(total)})</div>`;
+      html += `<table><thead><tr>`;
+      if (cfg.kodLabel) html += `<th>${cfg.kodLabel}</th>`;
+      html += `<th>${cfg.adLabel}</th><th>Tutar</th>${m.hesabaGecen ? '<th>Hesaba Geçen</th>' : ''}</tr></thead><tbody>`;
+      for (const row of rows){
+        html += `<tr>`;
+        if (cfg.kodLabel) html += `<td>${escapeAttr(row.kod)}</td>`;
+        html += `<td>${escapeAttr(row.ad)}</td><td>${fmt(row.tutar)}</td>${m.hesabaGecen ? `<td>${fmt(row.hesaba_gecen||0)}</td>` : ''}</tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+  }
+
+  html += `<div class="p-section-title">Özet</div>`;
+  html += `<div class="p-summary">
+    <div><span>Dünden Devir (Nakit)</span><b>${fmt(state.nakit_devir)}</b></div>
+    <div><span>Nakit Giriş</span><b>${fmt(r.nakitGiris)}</b></div>
+    <div><span>Nakit Çıkış</span><b>${fmt(r.nakitCikis)}</b></div>
+    <div><span>Nakit Durum</span><b>${fmt(r.nakitDurum)}</b></div>
+    <div><span>Kasa Mevcut (sayım)</span><b>${r.kasaMevcut===null?'—':fmt(r.kasaMevcut)}</b></div>
+    <div><span>Fark</span><b>${r.fark===null?'—':fmt(r.fark)}</b></div>
+    <div><span>Vakıfbank Toplam (net)</span><b>${fmt(r.vakifbankToplamSatis)}</b></div>
+    <div><span>YKB Toplam (net)</span><b>${fmt(r.ykbToplamSatis)}</b></div>
+    <div><span>Mail Order Net Kasa Etkisi</span><b>${fmt(r.mailorderNetKasaEtkisi)}</b></div>
+    <div><span>Bankalar Güncel Durum</span><b>${fmt(r.bankalarGuncelDurum)}</b></div>
+  </div>`;
+
+  document.getElementById('printArea').innerHTML = html;
+  window.print();
+}
+
 async function saveFoy(){
   const btn = document.getElementById('saveBtn');
   btn.disabled = true; btn.textContent = 'Kaydediliyor…';
