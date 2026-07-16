@@ -350,6 +350,9 @@
     #printArea .p-summary{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px;font-size:12px;margin-top:10px;}
     #printArea .p-summary div{display:flex;justify-content:space-between;border-bottom:1px dotted #ccc;padding:2px 0;}
     #printArea .p-summary b{font-weight:700;}
+    #printArea .fis-copy{page-break-after:always;}
+    #printArea .fis-copy:last-child{page-break-after:auto;}
+    #printArea .fis-copy-label{font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#666;margin-bottom:2px;}
   }
 </style>
 </head>
@@ -642,6 +645,7 @@
 <div class="toast" id="toast"></div>
 
 <div id="printArea"></div>
+<style id="printPageStyle"></style>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
@@ -1627,38 +1631,6 @@ function updateFisCell(idx, field, value){
   if (field === 'kod' || field === 'ad') row[field] = value;
   else row[field] = value === '' ? 0 : Number(value);
 
-  // Daha önce kaydedilmiş bir ürünle eşleşiyorsa diğer alanları (ve boşsa fiyatı) otomatik doldur
-  if (field === 'kod' && value){
-    const match = urunListe.find(u => u.kod && u.kod === value);
-    if (match){
-      if (!row.ad && match.ad){
-        row.ad = match.ad;
-        const adEl = document.getElementById(`fis-ad-${idx}`);
-        if (adEl) adEl.value = match.ad;
-      }
-      if (!row.fiyat && match.fiyat){
-        row.fiyat = match.fiyat;
-        const fiyatEl = document.getElementById(`fis-fiyat-${idx}`);
-        if (fiyatEl) fiyatEl.value = match.fiyat;
-      }
-    }
-  }
-  if (field === 'ad' && value){
-    const match = urunListe.find(u => u.ad && u.ad === value);
-    if (match){
-      if (!row.kod && match.kod){
-        row.kod = match.kod;
-        const kodEl = document.getElementById(`fis-kod-${idx}`);
-        if (kodEl) kodEl.value = match.kod;
-      }
-      if (!row.fiyat && match.fiyat){
-        row.fiyat = match.fiyat;
-        const fiyatEl = document.getElementById(`fis-fiyat-${idx}`);
-        if (fiyatEl) fiyatEl.value = match.fiyat;
-      }
-    }
-  }
-
   renderFisRowTutar(idx);
   renderFisTotalsOnly();
 }
@@ -1835,7 +1807,7 @@ async function getNextFisNo(){
   }
 }
 
-function buildFisPrintHTML(rec){
+function buildFisPrintHTML(rec, copyLabel){
   const dt = new Date(rec.created_at || Date.now());
   const tarihStr = dt.toLocaleDateString('tr-TR');
   const saatStr = dt.toLocaleTimeString('tr-TR');
@@ -1847,6 +1819,7 @@ function buildFisPrintHTML(rec){
       </div>
       <div style="flex:1;"></div>
       <div style="text-align:right;font-size:11.5px;color:#333;">
+        ${copyLabel ? `<div class="fis-copy-label">${escapeAttr(copyLabel)}</div>` : ''}
         <div>${escapeAttr(rec.fis_no)}</div>
         <div>${saatStr}</div>
         <div>${tarihStr}</div>
@@ -1871,6 +1844,15 @@ function buildFisPrintHTML(rec){
     <div><span>GENEL TOPLAM (KDV DAHİL)</span><b>${fmt(rec.genel_toplam)}</b></div>
   </div>`;
   return html;
+}
+
+function setPrintPageSize(size, margin){
+  const el = document.getElementById('printPageStyle');
+  if (el) el.textContent = `@media print{ @page{ size:${size}; margin:${margin}; } }`;
+}
+function buildFisDoubleCopyHTML(rec){
+  return `<div class="fis-copy">${buildFisPrintHTML(rec, 'MÜŞTERİ NÜSHASI')}</div>`
+       + `<div class="fis-copy">${buildFisPrintHTML(rec, 'İŞLETME NÜSHASI')}</div>`;
 }
 
 async function printFis(){
@@ -1904,7 +1886,8 @@ async function printFis(){
     toast('Fiş kaydedilemedi (yazdırma devam ediyor): ' + err.message, true);
   }
 
-  document.getElementById('printArea').innerHTML = buildFisPrintHTML(record);
+  document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(record);
+  setPrintPageSize('A5', '8mm');
   window.print();
 }
 
@@ -1945,7 +1928,8 @@ async function loadFisHistory(){
       <button class="btn danger" style="padding:6px 12px;font-size:12px;">✕ Sil</button>
     `;
     div.querySelectorAll('button')[0].onclick = () => {
-      document.getElementById('printArea').innerHTML = buildFisPrintHTML(rec);
+      document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(rec);
+      setPrintPageSize('A5', '8mm');
       window.print();
     };
     div.querySelectorAll('button')[1].onclick = async () => {
@@ -2258,6 +2242,7 @@ function printFoy(){
   </div>`;
 
   document.getElementById('printArea').innerHTML = html;
+  setPrintPageSize('A4', '15mm');
   window.print();
 }
 
