@@ -569,7 +569,14 @@
         <div class="card-body" style="padding:14px;">
           <div class="field-grid">
             <div class="field-item"><label>Cari Kod</label><input type="text" id="teklifCariKod"></div>
-            <div class="field-item"><label>Cari Adı</label><input type="text" id="teklifCariAdi"></div>
+            <div class="field-item" style="position:relative;">
+              <label>Cari Adı</label>
+              <input type="text" id="teklifCariAdi" autocomplete="off"
+                oninput="showCariDropdown(this.value, 'teklifCariAdi', 'teklifCariAdiDropdown')"
+                onfocus="showCariDropdown(this.value, 'teklifCariAdi', 'teklifCariAdiDropdown')"
+                onblur="hideDropdownDelayed('teklifCariAdiDropdown')">
+              <div class="autocomplete-list hidden" id="teklifCariAdiDropdown"></div>
+            </div>
             <div class="field-item"><label>Plaka</label><input type="text" id="teklifPlaka"></div>
             <div class="field-item"><label>Telefon No</label><input type="text" id="teklifTelefon"></div>
             <div class="field-item"><label>Şase No</label><input type="text" id="teklifSaseNo"></div>
@@ -1016,6 +1023,7 @@ function switchSide(side){
   }
   if (side === 'teklif'){
     if (!teklifRows.length){ teklifRows.push(newFisRow()); renderTeklifRows(); }
+    if (!cariListeLoaded) loadCariListe();
     if (!urunListeLoaded) loadUrunListe();
   }
   if (side === 'istatistik') initIstatistik();
@@ -1849,8 +1857,8 @@ async function loadCariListe(){
   cariListeLoaded = true;
 }
 
-function showCariDropdown(query){
-  showAutocompleteDropdown('fisCari', 'fisCariDropdown', cariListe, query, () => {});
+function showCariDropdown(query, inputId, dropdownId){
+  showAutocompleteDropdown(inputId || 'fisCari', dropdownId || 'fisCariDropdown', cariListe, query, () => {}, 3);
 }
 
 async function saveCariIfNew(ad){
