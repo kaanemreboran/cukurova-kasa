@@ -1,4 +1,4 @@
-const CACHE = 'kasa-foyu-v4';
+const CACHE = 'kasa-foyu-v5';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png', './cukurova-logo.png'];
 
 self.addEventListener('install', (e) => {
@@ -13,28 +13,32 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
-// Supabase (canlı veri) isteklerine HİÇ dokunmuyoruz.
-// Önceki sürümde ağ hatası yakalanıp Supabase'e sahte bir "başarılı" cevap
-// ({offline:true}) döndürülüyordu. Supabase kütüphanesi bunu gerçek veri sanıp
-// beklenmedik formatta işlemeye çalışınca ilgili işlem sessizce takılı kalıyor —
-// ekranın rastgele "kitlenmesi" büyük ihtimalle buradan kaynaklanıyordu.
-// Şimdi isteği olduğu gibi tarayıcıya bırakıyoruz; gerçek bir ağ hatası olursa
-// uygulama zaten kendi try/catch'i ile düzgün bir hata mesajı gösteriyor.
+// SADECE kendi site dosyalarımıza (aynı origin, GET istekleri) karışıyoruz.
+// Supabase, Chart.js, Supabase-JS gibi TÜM dış/CDN istekleri service worker'a
+// hiç uğramadan doğrudan tarayıcıya bırakılıyor. Önceki sürümde bu istekleri
+// de yönetmeye çalışmak — özellikle önbellek boşken (site verisi temizlendiğinde
+// veya ilk kurulumda) — sayfayı tamamen kilitleyen hatalara yol açıyordu.
 self.addEventListener('fetch', (e) => {
-  const url = e.request.url;
-  if (url.includes('supabase.co')) return; // dokunma, tarayıcı kendi halletsin
+  const req = e.request;
+  let url;
+  try { url = new URL(req.url); } catch(err) { return; }
 
-  // Uygulama dosyaları (index.html, manifest, ikonlar): önce ağdan dene ki
-  // güncelleme hemen gelsin — ama yavaş/kesik bağlantıda sonsuza kadar
-  // beklemesin diye kısa bir zaman aşımıyla önbelleğe düş.
+  const isSameOrigin = url.origin === self.location.origin;
+  if (req.method !== 'GET' || !isSameOrigin) return; // dokunma, tarayıcı kendi halletsin
+
   e.respondWith(
-    Promise.race([
-      fetch(e.request).then((res) => {
+    fetch(req)
+      .then((res) => {
         const resClone = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, resClone));
+        caches.open(CACHE).then((c) => c.put(req, resClone));
         return res;
-      }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000))
-    ]).catch(() => caches.match(e.request))
+      })
+      .catch(async () => {
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        const fallback = await caches.match('./index.html');
+        if (fallback) return fallback;
+        return Response.error(); // asla undefined döndürme — tarayıcı çöker
+      })
   );
 });
