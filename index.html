@@ -1788,10 +1788,19 @@ async function loadFisHistory(){
         <div><span>Genel Toplam</span>${fmt(rec.genel_toplam)}</div>
       </div>
       <button class="btn ghost" style="padding:6px 12px;font-size:12px;">🖨️ Yazdır</button>
+      <button class="btn danger" style="padding:6px 12px;font-size:12px;">✕ Sil</button>
     `;
-    div.querySelector('button').onclick = () => {
+    div.querySelectorAll('button')[0].onclick = () => {
       document.getElementById('printArea').innerHTML = buildFisPrintHTML(rec);
       window.print();
+    };
+    div.querySelectorAll('button')[1].onclick = async () => {
+      const ok = confirm(`${escapeAttr(rec.fis_no)} numaralı fişi kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
+      if (!ok) return;
+      const { error: delErr } = await sb.from('fisler').delete().eq('id', rec.id);
+      if (delErr){ toast('Silme hatası: ' + delErr.message, true); return; }
+      toast('Fiş silindi ✓');
+      loadFisHistory();
     };
     list.appendChild(div);
   }
