@@ -194,6 +194,16 @@
   }
   .autocomplete-item:hover{background:var(--navy-800);color:var(--indigo-light);}
 
+  /* ---------- bağlantı uyarısı ---------- */
+  #connWarning{
+    display:none;
+    position:sticky;top:0;z-index:500;
+    background:#7c2d12;color:#fed7aa;
+    text-align:center;padding:9px 14px;font-size:13px;font-weight:700;
+    letter-spacing:.2px;
+  }
+  #connWarning.show{display:block;}
+
   @media (max-width:760px){
     .app-body{flex-direction:column;}
     .side-nav{
@@ -370,6 +380,8 @@
 </style>
 </head>
 <body>
+
+<div id="connWarning">⚠️ İnternet bağlantısı stabil değil — veriler yüklenemiyor/kaydedilemiyor olabilir</div>
 
 <div id="loginOverlay" class="login-overlay hidden">
   <div class="login-box">
@@ -2818,6 +2830,34 @@ function toast(msg, isErr){
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=> el.classList.remove('show'), 3200);
 }
+
+/* ============================================================
+   BAĞLANTI UYARISI — Supabase'e periyodik küçük bir "yoklama" isteği atıp
+   cevap gelmezse (gerçek internet kesintisi) üstte uyarı bandı gösterir.
+   Not: Supabase istekleri service worker tarafından hiç önbelleğe alınmıyor,
+   bu yüzden bu kontrol gerçek ağ durumunu yansıtır (sahte "başarılı" cevap riski yok).
+   ============================================================ */
+let connCheckFails = 0;
+function setConnBanner(show){
+  const el = document.getElementById('connWarning');
+  if (el) el.classList.toggle('show', show);
+}
+async function checkConnection(){
+  try{
+    const { error } = await sb.from('kasa_foyleri').select('id').limit(1);
+    if (error) throw error;
+    connCheckFails = 0;
+    setConnBanner(false);
+  } catch(e){
+    connCheckFails++;
+    if (connCheckFails >= 2) setConnBanner(true); // tek seferlik ufak pürüzde göstermesin diye 2 ardışık başarısızlık bekliyoruz
+  }
+}
+window.addEventListener('offline', () => setConnBanner(true));
+window.addEventListener('online', () => { connCheckFails = 0; checkConnection(); });
+setInterval(checkConnection, 20000);
+setTimeout(checkConnection, 5000);
+
 
 /* ============================================================
    BOOT
