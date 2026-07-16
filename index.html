@@ -417,6 +417,7 @@
     <button id="sideBtnFoy" class="active" onclick="switchSide('foy')"><span class="side-ico">📋</span> Bugünkü Föy</button>
     <div class="side-label" style="margin-top:6px;">Diğer</div>
     <button id="sideBtnFis" onclick="switchSide('fis')"><span class="side-ico">🧾</span> Fiş</button>
+    <button id="sideBtnTeklif" onclick="switchSide('teklif')"><span class="side-ico">📝</span> Teklif</button>
     <button id="sideBtnIstatistik" onclick="switchSide('istatistik')"><span class="side-ico">📊</span> İstatistik</button>
     <button id="sideBtnAdmin" onclick="switchSide('admin')"><span class="side-ico">⚙️</span> Admin</button>
   </aside>
@@ -489,8 +490,6 @@
     <nav class="tabs" style="padding-top:0;margin-bottom:14px;">
       <button id="fisSubBtnYeni" class="active" onclick="switchFisSub('yeni')">Yeni Fiş</button>
       <button id="fisSubBtnGecmis" onclick="switchFisSub('gecmis')">Fiş Geçmişi</button>
-      <button id="fisSubBtnTeklif" onclick="switchFisSub('teklif')">Teklif</button>
-      <button id="fisSubBtnTeklifGecmis" onclick="switchFisSub('teklifGecmis')">Teklif Geçmişi</button>
     </nav>
 
     <div id="fisSubYeni">
@@ -555,9 +554,16 @@
         <div class="empty">Yükleniyor…</div>
       </div>
     </div>
+  </section>
 
-    <!-- ===================== TEKLİF (YENİ) ===================== -->
-    <div id="fisSubTeklif" class="hidden">
+  <!-- ===================== TEKLİF ===================== -->
+  <section id="tabTeklif" class="hidden">
+    <nav class="tabs" style="padding-top:0;margin-bottom:14px;">
+      <button id="teklifSubBtnYeni" class="active" onclick="switchTeklifSub('yeni')">Teklif</button>
+      <button id="teklifSubBtnGecmis" onclick="switchTeklifSub('gecmis')">Teklif Geçmişi</button>
+    </nav>
+
+    <div id="teklifSubYeni">
       <div class="card" style="margin-bottom:16px;">
         <div class="card-head"><h3>Müşteri / Araç Bilgileri</h3></div>
         <div class="card-body" style="padding:14px;">
@@ -615,8 +621,7 @@
       </div>
     </div>
 
-    <!-- ===================== TEKLİF GEÇMİŞİ ===================== -->
-    <div id="fisSubTeklifGecmis" class="hidden">
+    <div id="teklifSubGecmis" class="hidden">
       <div class="toolbar">
         <label>Tarih</label>
         <input type="date" id="teklifFiltBaslangic">
@@ -985,18 +990,20 @@ function switchTab(tab){
 function switchSide(side){
   document.getElementById('sideBtnFoy').classList.toggle('active', side === 'foy');
   document.getElementById('sideBtnFis').classList.toggle('active', side === 'fis');
+  document.getElementById('sideBtnTeklif').classList.toggle('active', side === 'teklif');
   document.getElementById('sideBtnIstatistik').classList.toggle('active', side === 'istatistik');
   document.getElementById('sideBtnAdmin').classList.toggle('active', side === 'admin');
 
   document.getElementById('foySubTabs').classList.toggle('hidden', side !== 'foy');
   document.getElementById('tabFis').classList.toggle('hidden', side !== 'fis');
+  document.getElementById('tabTeklif').classList.toggle('hidden', side !== 'teklif');
   document.getElementById('tabIstatistik').classList.toggle('hidden', side !== 'istatistik');
   document.getElementById('tabAdmin').classList.toggle('hidden', side !== 'admin');
 
   if (side === 'foy'){
     switchTab('foy');
   } else {
-    // Föy alt sekmelerini gizle (Fiş/İstatistik/Admin görüntülenirken)
+    // Föy alt sekmelerini gizle (Fiş/Teklif/İstatistik/Admin görüntülenirken)
     document.getElementById('tabFoy').classList.add('hidden');
     document.getElementById('tabGecmis').classList.add('hidden');
     document.getElementById('tabHareketler').classList.add('hidden');
@@ -1007,23 +1014,27 @@ function switchSide(side){
     if (!cariListeLoaded) loadCariListe();
     if (!urunListeLoaded) loadUrunListe();
   }
+  if (side === 'teklif'){
+    if (!teklifRows.length){ teklifRows.push(newFisRow()); renderTeklifRows(); }
+    if (!urunListeLoaded) loadUrunListe();
+  }
   if (side === 'istatistik') initIstatistik();
 }
 
 function switchFisSub(sub){
-  const tabs = {
-    yeni: { btn: 'fisSubBtnYeni', panel: 'fisSubYeni' },
-    gecmis: { btn: 'fisSubBtnGecmis', panel: 'fisSubGecmis' },
-    teklif: { btn: 'fisSubBtnTeklif', panel: 'fisSubTeklif' },
-    teklifGecmis: { btn: 'fisSubBtnTeklifGecmis', panel: 'fisSubTeklifGecmis' }
-  };
-  Object.keys(tabs).forEach(key => {
-    document.getElementById(tabs[key].btn).classList.toggle('active', key === sub);
-    document.getElementById(tabs[key].panel).classList.toggle('hidden', key !== sub);
-  });
+  document.getElementById('fisSubBtnYeni').classList.toggle('active', sub === 'yeni');
+  document.getElementById('fisSubBtnGecmis').classList.toggle('active', sub === 'gecmis');
+  document.getElementById('fisSubYeni').classList.toggle('hidden', sub !== 'yeni');
+  document.getElementById('fisSubGecmis').classList.toggle('hidden', sub !== 'gecmis');
   if (sub === 'gecmis') loadFisHistory();
-  if (sub === 'teklifGecmis') loadTeklifHistory();
-  if (sub === 'teklif' && !teklifRows.length){ teklifRows.push(newFisRow()); renderTeklifRows(); }
+}
+
+function switchTeklifSub(sub){
+  document.getElementById('teklifSubBtnYeni').classList.toggle('active', sub === 'yeni');
+  document.getElementById('teklifSubBtnGecmis').classList.toggle('active', sub === 'gecmis');
+  document.getElementById('teklifSubYeni').classList.toggle('hidden', sub !== 'yeni');
+  document.getElementById('teklifSubGecmis').classList.toggle('hidden', sub !== 'gecmis');
+  if (sub === 'gecmis') loadTeklifHistory();
 }
 
 /* ============================================================
@@ -1856,11 +1867,17 @@ async function saveCariIfNew(ad){
    GENEL DROPDOWN MOTORU — cari ve ürün alanlarında ortak kullanılır
    (data-value + event delegation: inline tırnak çakışması olmasın diye)
    ============================================================ */
-function showAutocompleteDropdown(inputId, dropdownId, sourceList, query, onSelect){
+function showAutocompleteDropdown(inputId, dropdownId, sourceList, query, onSelect, minLength){
+  minLength = minLength || 0;
   const input = document.getElementById(inputId);
   const dropdown = document.getElementById(dropdownId);
   if (!input || !dropdown) return;
   const q = (query || '').toLocaleLowerCase('tr-TR');
+  if (q.length < minLength){
+    dropdown.classList.add('hidden');
+    dropdown.innerHTML = '';
+    return;
+  }
   const filtered = (q ? sourceList.filter(v => v.toLocaleLowerCase('tr-TR').includes(q)) : sourceList).slice(0, 50);
   if (!filtered.length){
     dropdown.classList.add('hidden');
@@ -1923,7 +1940,7 @@ function showUrunDropdown(idx, field, query){
     : [...new Set(urunListe.map(u => u.ad).filter(Boolean))];
   showAutocompleteDropdown(`fis-${field}-${idx}`, `fis-${field}-dropdown-${idx}`, source, query, (value) => {
     updateFisCell(idx, field, value);
-  });
+  }, 3);
 }
 function hideUrunDropdownDelayed(idx, field){
   hideDropdownDelayed(`fis-${field}-dropdown-${idx}`);
@@ -2125,7 +2142,7 @@ function showTeklifUrunDropdown(idx, field, query){
     : [...new Set(urunListe.map(u => u.ad).filter(Boolean))];
   showAutocompleteDropdown(`teklif-${field}-${idx}`, `teklif-${field}-dropdown-${idx}`, source, query, (value) => {
     updateTeklifCell(idx, field, value);
-  });
+  }, 3);
 }
 
 function renderTeklifRows(){
@@ -2217,6 +2234,7 @@ function sendTeklifToFis(){
   if (plaka) cariText += (cariText ? ' — ' : '') + plaka;
 
   fisRows = teklifRows.map(r => ({ ...r, _id: Math.random().toString(36).slice(2) }));
+  switchSide('fis');
   switchFisSub('yeni');
   document.getElementById('fisCari').value = cariText;
   renderFisRows();
@@ -2229,6 +2247,7 @@ function sendTeklifRecordToFis(rec){
   if (rec.plaka) cariText += (cariText ? ' — ' : '') + rec.plaka;
 
   fisRows = (rec.urunler || []).map(r => ({ ...r, _id: Math.random().toString(36).slice(2) }));
+  switchSide('fis');
   switchFisSub('yeni');
   document.getElementById('fisCari').value = cariText;
   renderFisRows();
