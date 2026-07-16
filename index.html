@@ -476,15 +476,17 @@
     </nav>
 
     <div id="fisSubYeni">
-      <div class="toolbar">
+      <div class="toolbar" style="position:relative;">
         <label>Cari / Usta</label>
-        <input type="text" id="fisCari" list="cariDatalist" placeholder="Örn: ÇOPUR OTO / HÜSEYİN ÇOPUR" style="flex:1;min-width:220px;">
-        <datalist id="cariDatalist"></datalist>
+        <input type="text" id="fisCari" autocomplete="off" placeholder="Örn: ÇOPUR OTO / HÜSEYİN ÇOPUR" style="flex:1;min-width:220px;"
+          oninput="showCariDropdown(this.value)"
+          onfocus="showCariDropdown(this.value)"
+          onblur="hideDropdownDelayed('fisCariDropdown')">
+        <div class="autocomplete-list hidden" id="fisCariDropdown"></div>
         <div class="spacer"></div>
         <button class="btn ghost" onclick="clearFis()">Temizle</button>
         <button class="btn" onclick="printFis()">🖨️ Fişi Kaydet ve Yazdır</button>
       </div>
-      <div id="cariChips" style="display:flex;flex-wrap:wrap;gap:6px;margin:-6px 0 14px;"></div>
 
       <div class="card">
         <div class="card-head"><h3>Ürünler</h3><span class="toplam">Genel Toplam (KDV Dahil): <b id="fisGenelToplam">0,00</b></span></div>
@@ -1718,23 +1720,11 @@ async function loadCariListe(){
   const { data, error } = await sb.from('fis_cariler').select('ad').order('ad');
   if (error) return;
   cariListe = (data || []).map(r => r.ad);
-  renderCariChips();
-  const dl = document.getElementById('cariDatalist');
-  dl.innerHTML = cariListe.map(ad => `<option value="${escapeAttr(ad)}">`).join('');
   cariListeLoaded = true;
 }
 
-function renderCariChips(){
-  const el = document.getElementById('cariChips');
-  if (!el) return;
-  if (!cariListe.length){ el.innerHTML = ''; return; }
-  el.innerHTML = cariListe.map(ad => `
-    <button type="button" class="btn ghost" style="padding:5px 12px;font-size:12px;border-radius:20px;" onclick="selectCari('${ad.replace(/'/g,"\\'")}')">${escapeAttr(ad)}</button>
-  `).join('');
-}
-
-function selectCari(ad){
-  document.getElementById('fisCari').value = ad;
+function showCariDropdown(query){
+  showAutocompleteDropdown('fisCari', 'fisCariDropdown', cariListe, query, () => {});
 }
 
 async function saveCariIfNew(ad){
@@ -1743,11 +1733,49 @@ async function saveCariIfNew(ad){
   if (!error){
     cariListe.push(ad);
     cariListe.sort();
-    renderCariChips();
-    const dl = document.getElementById('cariDatalist');
-    if (dl) dl.innerHTML = cariListe.map(a => `<option value="${escapeAttr(a)}">`).join('');
   }
   // zaten varsa (unique constraint) sessizce geç
+}
+
+/* ============================================================
+   GENEL DROPDOWN MOTORU — cari ve ürün alanlarında ortak kullanılır
+   (data-value + event delegation: inline tırnak çakışması olmasın diye)
+   ============================================================ */
+function showAutocompleteDropdown(inputId, dropdownId, sourceList, query, onSelect){
+  const input = document.getElementById(inputId);
+  const dropdown = document.getElementById(dropdownId);
+  if (!input || !dropdown) return;
+  const q = (query || '').toLocaleLowerCase('tr-TR');
+  const filtered = (q ? sourceList.filter(v => v.toLocaleLowerCase('tr-TR').includes(q)) : sourceList).slice(0, 50);
+  if (!filtered.length){
+    dropdown.classList.add('hidden');
+    dropdown.innerHTML = '';
+    return;
+  }
+  dropdown.innerHTML = filtered.map(v => `<div class="autocomplete-item" data-value="${escapeAttr(v)}">${escapeAttr(v)}</div>`).join('');
+  dropdown.onmousedown = (e) => {
+    const item = e.target.closest('.autocomplete-item');
+    if (!item) return;
+    e.preventDefault();
+    input.value = item.dataset.value;
+    dropdown.classList.add('hidden');
+    dropdown.innerHTML = '';
+    onSelect(item.dataset.value);
+    input.focus();
+  };
+  const rect = input.getBoundingClientRect();
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.top = (rect.bottom + 3) + 'px';
+  dropdown.style.width = Math.max(rect.width, 180) + 'px';
+  dropdown.classList.remove('hidden');
+}
+function hideDropdown(dropdownId){
+  const dropdown = document.getElementById(dropdownId);
+  if (dropdown){ dropdown.classList.add('hidden'); dropdown.innerHTML = ''; }
+}
+function hideDropdownDelayed(dropdownId){
+  setTimeout(() => hideDropdown(dropdownId), 150);
 }
 
 /* ============================================================
@@ -1775,50 +1803,15 @@ async function saveUrunIfNew(kod, ad, fiyat){
 }
 
 function showUrunDropdown(idx, field, query){
-  const dropdown = document.getElementById(`fis-${field}-dropdown-${idx}`);
-  if (!dropdown) return;
   const source = field === 'kod'
     ? [...new Set(urunListe.map(u => u.kod).filter(Boolean))]
     : [...new Set(urunListe.map(u => u.ad).filter(Boolean))];
-  const q = (query || '').toLocaleLowerCase('tr-TR');
-  const filtered = (q ? source.filter(v => v.toLocaleLowerCase('tr-TR').includes(q)) : source).slice(0, 50);
-  if (!filtered.length){
-    dropdown.classList.add('hidden');
-    dropdown.innerHTML = '';
-    return;
-  }
-  dropdown.innerHTML = filtered.map(v =>
-    `<div class="autocomplete-item" onmousedown="event.preventDefault(); selectUrunSuggestion(${idx},'${field}',${JSON.stringify(v)})">${escapeAttr(v)}</div>`
-  ).join('');
-  positionUrunDropdown(idx, field);
-  dropdown.classList.remove('hidden');
-}
-
-function positionUrunDropdown(idx, field){
-  const input = document.getElementById(`fis-${field}-${idx}`);
-  const dropdown = document.getElementById(`fis-${field}-dropdown-${idx}`);
-  if (!input || !dropdown) return;
-  const rect = input.getBoundingClientRect();
-  dropdown.style.position = 'fixed';
-  dropdown.style.left = rect.left + 'px';
-  dropdown.style.top = (rect.bottom + 3) + 'px';
-  dropdown.style.width = Math.max(rect.width, 180) + 'px';
-}
-
-function selectUrunSuggestion(idx, field, value){
-  const input = document.getElementById(`fis-${field}-${idx}`);
-  if (input) input.value = value;
-  updateFisCell(idx, field, value);
-  hideUrunDropdown(idx, field);
-  if (input) input.focus();
-}
-
-function hideUrunDropdown(idx, field){
-  const dropdown = document.getElementById(`fis-${field}-dropdown-${idx}`);
-  if (dropdown){ dropdown.classList.add('hidden'); dropdown.innerHTML = ''; }
+  showAutocompleteDropdown(`fis-${field}-${idx}`, `fis-${field}-dropdown-${idx}`, source, query, (value) => {
+    updateFisCell(idx, field, value);
+  });
 }
 function hideUrunDropdownDelayed(idx, field){
-  setTimeout(() => hideUrunDropdown(idx, field), 150);
+  hideDropdownDelayed(`fis-${field}-dropdown-${idx}`);
 }
 
 function clearFis(){
