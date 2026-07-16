@@ -470,6 +470,8 @@
         <label>Cari / Usta</label>
         <input type="text" id="fisCari" list="cariDatalist" placeholder="Örn: ÇOPUR OTO / HÜSEYİN ÇOPUR" style="flex:1;min-width:220px;">
         <datalist id="cariDatalist"></datalist>
+        <datalist id="urunKodDatalist"></datalist>
+        <datalist id="urunAdDatalist"></datalist>
         <div class="spacer"></div>
         <button class="btn ghost" onclick="clearFis()">Temizle</button>
         <button class="btn" onclick="printFis()">🖨️ Fişi Kaydet ve Yazdır</button>
@@ -898,6 +900,7 @@ function switchSide(side){
   if (side === 'fis'){
     if (!fisRows.length){ fisRows.push(newFisRow()); renderFisRows(); }
     if (!cariListeLoaded) loadCariListe();
+    if (!urunListeLoaded) loadUrunListe();
   }
   if (side === 'istatistik') initIstatistik();
 }
@@ -1613,6 +1616,39 @@ function updateFisCell(idx, field, value){
   const row = fisRows[idx];
   if (field === 'kod' || field === 'ad') row[field] = value;
   else row[field] = value === '' ? 0 : Number(value);
+
+  // Daha önce kaydedilmiş bir ürünle eşleşiyorsa diğer alanları (ve boşsa fiyatı) otomatik doldur
+  if (field === 'kod' && value){
+    const match = urunListe.find(u => u.kod && u.kod === value);
+    if (match){
+      if (!row.ad && match.ad){
+        row.ad = match.ad;
+        const adEl = document.getElementById(`fis-ad-${idx}`);
+        if (adEl) adEl.value = match.ad;
+      }
+      if (!row.fiyat && match.fiyat){
+        row.fiyat = match.fiyat;
+        const fiyatEl = document.getElementById(`fis-fiyat-${idx}`);
+        if (fiyatEl) fiyatEl.value = match.fiyat;
+      }
+    }
+  }
+  if (field === 'ad' && value){
+    const match = urunListe.find(u => u.ad && u.ad === value);
+    if (match){
+      if (!row.kod && match.kod){
+        row.kod = match.kod;
+        const kodEl = document.getElementById(`fis-kod-${idx}`);
+        if (kodEl) kodEl.value = match.kod;
+      }
+      if (!row.fiyat && match.fiyat){
+        row.fiyat = match.fiyat;
+        const fiyatEl = document.getElementById(`fis-fiyat-${idx}`);
+        if (fiyatEl) fiyatEl.value = match.fiyat;
+      }
+    }
+  }
+
   renderFisRowTutar(idx);
   renderFisTotalsOnly();
 }
@@ -1637,10 +1673,10 @@ function renderFisRows(){
     const tr = document.createElement('tr');
     tr.className = 'row-line';
     tr.innerHTML = `
-      <td><input type="text" value="${escapeAttr(row.kod)}" oninput="updateFisCell(${idx},'kod',this.value)"></td>
-      <td><input type="text" value="${escapeAttr(row.ad)}" oninput="updateFisCell(${idx},'ad',this.value)"></td>
+      <td><input type="text" id="fis-kod-${idx}" list="urunKodDatalist" value="${escapeAttr(row.kod)}" oninput="updateFisCell(${idx},'kod',this.value)"></td>
+      <td><input type="text" id="fis-ad-${idx}" list="urunAdDatalist" value="${escapeAttr(row.ad)}" oninput="updateFisCell(${idx},'ad',this.value)"></td>
       <td class="tutar-col"><input type="number" step="1" value="${row.adet}" oninput="updateFisCell(${idx},'adet',this.value)"></td>
-      <td class="tutar-col"><input type="number" step="0.01" value="${row.fiyat}" oninput="updateFisCell(${idx},'fiyat',this.value)"></td>
+      <td class="tutar-col"><input type="number" id="fis-fiyat-${idx}" step="0.01" value="${row.fiyat}" oninput="updateFisCell(${idx},'fiyat',this.value)"></td>
       <td class="tutar-col"><input type="number" step="1" value="${row.isk1}" oninput="updateFisCell(${idx},'isk1',this.value)"></td>
       <td class="tutar-col"><input type="number" step="1" value="${row.isk2}" oninput="updateFisCell(${idx},'isk2',this.value)"></td>
       <td class="tutar-col"><input type="number" step="1" value="${row.kdv}" oninput="updateFisCell(${idx},'kdv',this.value)"></td>
@@ -1692,6 +1728,41 @@ async function saveCariIfNew(ad){
     if (dl) dl.innerHTML = cariListe.map(a => `<option value="${escapeAttr(a)}">`).join('');
   }
   // zaten varsa (unique constraint) sessizce geç
+}
+
+/* ============================================================
+   ÜRÜN KODU / ADI HIZLI SEÇİM (fis_cariler ile aynı mantık)
+   ============================================================ */
+let urunListe = []; // [{kod, ad, fiyat}]
+let urunListeLoaded = false;
+
+async function loadUrunListe(){
+  const { data, error } = await sb.from('fis_urunler').select('kod, ad, son_fiyat').order('ad');
+  if (error) return;
+  urunListe = (data || []).map(r => ({ kod: r.kod || '', ad: r.ad || '', fiyat: Number(r.son_fiyat) || 0 }));
+  rebuildUrunDatalists();
+  urunListeLoaded = true;
+}
+
+function rebuildUrunDatalists(){
+  const kodDl = document.getElementById('urunKodDatalist');
+  const adDl = document.getElementById('urunAdDatalist');
+  const kodlar = [...new Set(urunListe.map(u => u.kod).filter(Boolean))].sort();
+  const adlar = [...new Set(urunListe.map(u => u.ad).filter(Boolean))].sort();
+  if (kodDl) kodDl.innerHTML = kodlar.map(k => `<option value="${escapeAttr(k)}">`).join('');
+  if (adDl) adDl.innerHTML = adlar.map(a => `<option value="${escapeAttr(a)}">`).join('');
+}
+
+async function saveUrunIfNew(kod, ad, fiyat){
+  if (!kod && !ad) return;
+  const exists = urunListe.some(u => (u.kod||'') === (kod||'') && (u.ad||'') === (ad||''));
+  if (exists) return;
+  const { data, error } = await sb.from('fis_urunler').insert({ kod: kod || null, ad: ad || null, son_fiyat: fiyat || null }).select().single();
+  if (!error && data){
+    urunListe.push({ kod: data.kod || '', ad: data.ad || '', fiyat: Number(data.son_fiyat) || 0 });
+    rebuildUrunDatalists();
+  }
+  // hata olursa (örn. ağ sorunu) sessizce geç — fiş kaydı zaten tamamlandı
 }
 
 function clearFis(){
@@ -1777,6 +1848,9 @@ async function printFis(){
     });
     if (error) throw error;
     if (cari) saveCariIfNew(cari); // sonraki fişte tek tıkla seçilebilsin diye kaydet
+    for (const row of fisRows){
+      if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat);
+    }
   } catch(err){
     toast('Fiş kaydedilemedi (yazdırma devam ediyor): ' + err.message, true);
   }
