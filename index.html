@@ -444,24 +444,24 @@
 
     <div id="fisSubYeni">
       <div class="toolbar">
-        <label>Cari / Firma</label>
-        <input type="text" id="fisCari" placeholder="Örn: ÇOPUR OTO / HÜSEYİN ÇOPUR" style="flex:1;min-width:220px;">
-        <label>Plaka</label>
-        <input type="text" id="fisPlaka" placeholder="01 ABC 123" style="width:130px;">
+        <label>Cari / Usta</label>
+        <input type="text" id="fisCari" list="cariDatalist" placeholder="Örn: ÇOPUR OTO / HÜSEYİN ÇOPUR" style="flex:1;min-width:220px;">
+        <datalist id="cariDatalist"></datalist>
         <div class="spacer"></div>
         <button class="btn ghost" onclick="clearFis()">Temizle</button>
         <button class="btn" onclick="printFis()">🖨️ Fişi Kaydet ve Yazdır</button>
       </div>
+      <div id="cariChips" style="display:flex;flex-wrap:wrap;gap:6px;margin:-6px 0 14px;"></div>
 
       <div class="card">
-        <div class="card-head"><h3>Ürünler</h3><span class="toplam">Genel Toplam: <b id="fisGenelToplam">0,00</b></span></div>
+        <div class="card-head"><h3>Ürünler</h3><span class="toplam">Genel Toplam (KDV Dahil): <b id="fisGenelToplam">0,00</b></span></div>
         <div class="card-body">
           <table>
             <thead><tr>
               <th style="width:14%">Ürün Kodu</th>
               <th>Ürün Adı</th>
               <th style="width:7%">Adet</th>
-              <th style="width:11%">Fiyat</th>
+              <th style="width:13%">Fiyat (KDV Dahil)</th>
               <th style="width:8%">İsk1 %</th>
               <th style="width:8%">İsk2 %</th>
               <th style="width:8%">KDV %</th>
@@ -479,9 +479,9 @@
         <div class="sum-card">
           <div class="sum-head">Fiş Özeti</div>
           <div class="sum-body">
-            <div class="sum-row"><span>Ara Toplam</span><b id="fisAraToplam">0,00</b></div>
+            <div class="sum-row"><span>Ara Toplam (KDV Hariç)</span><b id="fisAraToplam">0,00</b></div>
             <div class="sum-row"><span>KDV Toplam</span><b id="fisKdvToplam">0,00</b></div>
-            <div class="sum-row total"><span>Genel Toplam</span><b id="fisGenelToplam2">0,00</b></div>
+            <div class="sum-row total"><span>Genel Toplam (KDV Dahil)</span><b id="fisGenelToplam2">0,00</b></div>
           </div>
         </div>
       </div>
@@ -513,6 +513,10 @@
       <input type="date" id="istBitis">
       <button class="btn ghost" onclick="loadIstatistik()">Getir</button>
       <div class="spacer"></div>
+      <button class="btn ghost" onclick="setIstRange('gun')">Bugün</button>
+      <button class="btn ghost" onclick="setIstRange('hafta')">Bu Hafta</button>
+      <button class="btn ghost" onclick="setIstRange('ay')">Bu Ay</button>
+      <button class="btn ghost" onclick="setIstRange('tum')">Tüm Zamanlar</button>
     </div>
 
     <div class="grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px;" id="istSummaryCards"></div>
@@ -524,10 +528,17 @@
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" style="margin-bottom:16px;">
       <div class="card-head"><h3>Ödeme Yöntemi Dağılımı (Girişler)</h3></div>
       <div class="card-body" style="padding:16px;max-width:420px;">
         <canvas id="istPieChart"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3>Usta Bazlı Satışlar (Fişler)</h3></div>
+      <div class="card-body" style="padding:12px 16px;">
+        <div id="istUstaListe"><div class="empty">Yükleniyor…</div></div>
       </div>
     </div>
   </section>
@@ -853,7 +864,10 @@ function switchSide(side){
     document.getElementById('tabHareketler').classList.add('hidden');
   }
   if (side === 'admin') loadAdminPanel();
-  if (side === 'fis' && !fisRows.length){ fisRows.push(newFisRow()); renderFisRows(); }
+  if (side === 'fis'){
+    if (!fisRows.length){ fisRows.push(newFisRow()); renderFisRows(); }
+    if (!cariListeLoaded) loadCariListe();
+  }
   if (side === 'istatistik') initIstatistik();
 }
 
@@ -1531,20 +1545,29 @@ let fisRows = [];
 function newFisRow(){
   return { kod:'', ad:'', adet:1, fiyat:0, isk1:0, isk2:0, kdv:20, _id: Math.random().toString(36).slice(2) };
 }
+// Not: Fiyat artık KDV DAHİL giriliyor. Satır tutarı da (iskontolar uygulanmış) KDV dahildir.
 function fisRowTutar(row){
   const base = (Number(row.fiyat)||0) * (Number(row.adet)||0);
   const afterIsk1 = base * (1 - (Number(row.isk1)||0)/100);
   const afterIsk2 = afterIsk1 * (1 - (Number(row.isk2)||0)/100);
-  return afterIsk2;
+  return afterIsk2; // KDV dahil satır tutarı
+}
+// KDV dahil tutardan, o satırın KDV payını geriye doğru hesaplar
+function fisRowKdvTutari(row){
+  const dahil = fisRowTutar(row);
+  const oran = (Number(row.kdv)||0)/100;
+  if (oran <= 0) return 0;
+  const haric = dahil / (1 + oran);
+  return dahil - haric;
 }
 function computeFisTotals(){
-  let araToplam = 0, kdvToplam = 0;
+  let genelToplam = 0, kdvToplam = 0;
   for (const row of fisRows){
-    const tutar = fisRowTutar(row);
-    araToplam += tutar;
-    kdvToplam += tutar * ((Number(row.kdv)||0)/100);
+    genelToplam += fisRowTutar(row);       // KDV dahil
+    kdvToplam += fisRowKdvTutari(row);
   }
-  return { araToplam, kdvToplam, genelToplam: araToplam + kdvToplam };
+  const araToplam = genelToplam - kdvToplam; // KDV hariç
+  return { araToplam, kdvToplam, genelToplam };
 }
 
 function addFisRow(){
@@ -1598,11 +1621,52 @@ function renderFisRows(){
   renderFisTotalsOnly();
 }
 
+/* ============================================================
+   CARİ / USTA HIZLI SEÇİM (bir kere girilen isim tekrar yazılmasın)
+   ============================================================ */
+let cariListe = [];
+let cariListeLoaded = false;
+
+async function loadCariListe(){
+  const { data, error } = await sb.from('fis_cariler').select('ad').order('ad');
+  if (error) return;
+  cariListe = (data || []).map(r => r.ad);
+  renderCariChips();
+  const dl = document.getElementById('cariDatalist');
+  dl.innerHTML = cariListe.map(ad => `<option value="${escapeAttr(ad)}">`).join('');
+  cariListeLoaded = true;
+}
+
+function renderCariChips(){
+  const el = document.getElementById('cariChips');
+  if (!el) return;
+  if (!cariListe.length){ el.innerHTML = ''; return; }
+  el.innerHTML = cariListe.map(ad => `
+    <button type="button" class="btn ghost" style="padding:5px 12px;font-size:12px;border-radius:20px;" onclick="selectCari('${ad.replace(/'/g,"\\'")}')">${escapeAttr(ad)}</button>
+  `).join('');
+}
+
+function selectCari(ad){
+  document.getElementById('fisCari').value = ad;
+}
+
+async function saveCariIfNew(ad){
+  if (cariListe.includes(ad)) return;
+  const { error } = await sb.from('fis_cariler').insert({ ad }).select();
+  if (!error){
+    cariListe.push(ad);
+    cariListe.sort();
+    renderCariChips();
+    const dl = document.getElementById('cariDatalist');
+    if (dl) dl.innerHTML = cariListe.map(a => `<option value="${escapeAttr(a)}">`).join('');
+  }
+  // zaten varsa (unique constraint) sessizce geç
+}
+
 function clearFis(){
   const ok = fisRows.length ? confirm('Fişi temizlemek istediğine emin misin?') : true;
   if (!ok) return;
   document.getElementById('fisCari').value = '';
-  document.getElementById('fisPlaka').value = '';
   fisRows = [];
   renderFisRows();
 }
@@ -1637,10 +1701,9 @@ function buildFisPrintHTML(rec){
         <div>${tarihStr}</div>
       </div>
     </div>
-    <div style="font-size:13px;font-weight:700;margin-bottom:4px;">${escapeAttr(rec.cari || '—')}</div>
-    <div style="font-size:12.5px;color:#333;margin-bottom:14px;">Plaka: ${escapeAttr(rec.plaka || '—')}</div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px;">${escapeAttr(rec.cari || '—')}</div>
     <table><thead><tr>
-      <th>ÜRÜN KODU</th><th>ÜRÜN ADI</th><th>AD</th><th>FİYAT</th><th>İSK1</th><th>İSK2</th><th>KDV</th><th>TUTAR</th>
+      <th>ÜRÜN KODU</th><th>ÜRÜN ADI</th><th>AD</th><th>FİYAT (KDV DAHİL)</th><th>İSK1</th><th>İSK2</th><th>KDV</th><th>TUTAR</th>
     </tr></thead><tbody>
   `;
   for (const row of rec.urunler){
@@ -1652,10 +1715,9 @@ function buildFisPrintHTML(rec){
   }
   html += `</tbody></table>`;
   html += `<div class="p-summary" style="grid-template-columns:1fr;max-width:280px;margin-left:auto;">
-    <div><span>TOPLAM</span><b>${fmt(rec.ara_toplam)}</b></div>
-    <div><span>ARA TOPLAM</span><b>${fmt(rec.ara_toplam)}</b></div>
+    <div><span>ARA TOPLAM (KDV HARİÇ)</span><b>${fmt(rec.ara_toplam)}</b></div>
     <div><span>KDV</span><b>${fmt(rec.kdv_toplam)}</b></div>
-    <div><span>GENEL TOPLAM</span><b>${fmt(rec.genel_toplam)}</b></div>
+    <div><span>GENEL TOPLAM (KDV DAHİL)</span><b>${fmt(rec.genel_toplam)}</b></div>
   </div>`;
   return html;
 }
@@ -1663,12 +1725,11 @@ function buildFisPrintHTML(rec){
 async function printFis(){
   if (!fisRows.length){ toast('Fişte ürün yok', true); return; }
   const cari = document.getElementById('fisCari').value.trim();
-  const plaka = document.getElementById('fisPlaka').value.trim();
   const t = computeFisTotals();
   const fis_no = await getNextFisNo();
 
   const record = {
-    fis_no, cari, plaka,
+    fis_no, cari,
     urunler: fisRows,
     ara_toplam: t.araToplam,
     kdv_toplam: t.kdvToplam,
@@ -1678,12 +1739,13 @@ async function printFis(){
 
   try{
     const { error } = await sb.from('fisler').insert({
-      fis_no, cari: cari || null, plaka: plaka || null,
+      fis_no, cari: cari || null,
       urunler: fisRows,
       ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
       olusturan: currentUser
     });
     if (error) throw error;
+    if (cari) saveCariIfNew(cari); // sonraki fişte tek tıkla seçilebilsin diye kaydet
   } catch(err){
     toast('Fiş kaydedilemedi (yazdırma devam ediyor): ' + err.message, true);
   }
@@ -1720,7 +1782,7 @@ async function loadFisHistory(){
     div.innerHTML = `
       <div>
         <div class="date" style="font-size:13.5px;">${escapeAttr(rec.fis_no)} <span style="font-weight:500;color:var(--ink-dim);">— ${escapeAttr(rec.cari || 'Cari yok')}</span></div>
-        <div class="meta">${dt.toLocaleString('tr-TR')} · Plaka: ${escapeAttr(rec.plaka || '—')} · ${escapeAttr(rec.olusturan || '')}</div>
+        <div class="meta">${dt.toLocaleString('tr-TR')} · ${escapeAttr(rec.olusturan || '')}</div>
       </div>
       <div class="nums">
         <div><span>Genel Toplam</span>${fmt(rec.genel_toplam)}</div>
@@ -1752,15 +1814,36 @@ function methodGroup(tip, key){
 const ISTAT_GROUP_LABELS = { nakit:'Nakit', kredi:'Kredi Kartı', havale:'Havale/Banka', mailorder:'Mail Order', masraf:'Masraf', diger:'Diğer' };
 const ISTAT_GROUP_COLORS = { nakit:'#22c55e', kredi:'#f59e0b', havale:'#3b82f6', mailorder:'#a855f7', masraf:'#ef4444', diger:'#94a3b8' };
 
+function fmtDateISO(d){
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function setIstRange(preset){
+  const today = new Date();
+  let start = new Date(today);
+  if (preset === 'gun'){
+    // start = today
+  } else if (preset === 'hafta'){
+    const gun = (today.getDay() + 6) % 7; // Pazartesi=0
+    start.setDate(start.getDate() - gun);
+  } else if (preset === 'ay'){
+    start = new Date(today.getFullYear(), today.getMonth(), 1);
+  } else if (preset === 'tum'){
+    start = new Date(2000, 0, 1);
+  }
+  document.getElementById('istBaslangic').value = fmtDateISO(start);
+  document.getElementById('istBitis').value = fmtDateISO(today);
+  loadIstatistik();
+}
+
 function initIstatistik(){
   const bEl = document.getElementById('istBaslangic');
   const eEl = document.getElementById('istBitis');
   if (!bEl.value || !eEl.value){
     const today = new Date();
     const start = new Date(today); start.setDate(start.getDate() - 29);
-    const fmtDate = (d) => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-    bEl.value = fmtDate(start);
-    eEl.value = fmtDate(today);
+    bEl.value = fmtDateISO(start);
+    eEl.value = fmtDateISO(today);
   }
   loadIstatistik();
 }
@@ -1776,6 +1859,7 @@ async function loadIstatistik(){
     document.getElementById('istSummaryCards').innerHTML = '<div class="empty" style="grid-column:1/-1;">Bu tarih aralığında kayıtlı föy yok.</div>';
     if (istLineChartInstance) istLineChartInstance.destroy();
     if (istPieChartInstance) istPieChartInstance.destroy();
+    loadUstaIstatistik(b, e);
     return;
   }
 
@@ -1866,6 +1950,76 @@ async function loadIstatistik(){
       responsive:true,
       plugins:{ legend:{ position:'bottom', labels:{ color:getComputedStyle(document.documentElement).getPropertyValue('--ink') } } }
     }
+  });
+
+  loadUstaIstatistik(b, e);
+}
+
+/* ============================================================
+   USTA BAZLI SATIŞ İSTATİSTİĞİ (fişlerden)
+   ============================================================ */
+async function loadUstaIstatistik(b, e){
+  const el = document.getElementById('istUstaListe');
+  if (!el) return;
+  el.innerHTML = '<div class="empty">Yükleniyor…</div>';
+
+  let q = sb.from('fisler').select('*').order('created_at');
+  if (b) q = q.gte('created_at', b + 'T00:00:00');
+  if (e) q = q.lte('created_at', e + 'T23:59:59');
+  const { data, error } = await q;
+  if (error){ el.innerHTML = '<div class="empty">Hata: ' + error.message + '</div>'; return; }
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">Bu aralıkta fiş kaydı yok.</div>'; return; }
+
+  // usta -> { toplam, urunler: { "kod|ad" -> {kod,ad,adet,tutar} } }
+  const ustalar = {};
+  for (const rec of data){
+    const usta = rec.cari || 'Cari belirtilmemiş';
+    if (!ustalar[usta]) ustalar[usta] = { toplam: 0, fisSayisi: 0, urunler: {} };
+    ustalar[usta].toplam += Number(rec.genel_toplam) || 0;
+    ustalar[usta].fisSayisi += 1;
+    for (const row of (rec.urunler || [])){
+      const key = (row.kod || '') + '|' + (row.ad || '');
+      if (!ustalar[usta].urunler[key]) ustalar[usta].urunler[key] = { kod: row.kod, ad: row.ad, adet: 0, tutar: 0 };
+      ustalar[usta].urunler[key].adet += Number(row.adet) || 0;
+      ustalar[usta].urunler[key].tutar += fisRowTutar(row);
+    }
+  }
+
+  const ustaAdlari = Object.keys(ustalar).sort((a,b2) => ustalar[b2].toplam - ustalar[a].toplam);
+
+  el.innerHTML = '';
+  ustaAdlari.forEach((usta, i) => {
+    const u = ustalar[usta];
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'border-bottom:1px solid var(--line);';
+    const head = document.createElement('div');
+    head.className = 'admin-cat-row';
+    head.style.cursor = 'pointer';
+    head.innerHTML = `
+      <span><span class="chevron" id="usta-chevron-${i}" style="display:inline-block;margin-right:8px;color:var(--ink-dim);transition:transform .15s;">▶</span>${escapeAttr(usta)} <span style="color:var(--ink-dim);font-size:12px;">(${u.fisSayisi} fiş)</span></span>
+      <b>${fmt(u.toplam)}</b>
+    `;
+    const body = document.createElement('div');
+    body.id = `usta-body-${i}`;
+    body.className = 'hidden';
+    body.style.padding = '0 0 10px 26px';
+
+    const urunler = Object.values(u.urunler).sort((a,b2) => b2.tutar - a.tutar);
+    let tbl = '<table><thead><tr><th>Ürün Kodu</th><th>Ürün Adı</th><th style="width:15%">Toplam Adet</th><th style="width:18%">Toplam Tutar</th></tr></thead><tbody>';
+    for (const p of urunler){
+      tbl += `<tr class="row-line"><td>${escapeAttr(p.kod)}</td><td>${escapeAttr(p.ad)}</td><td>${p.adet}</td><td>${fmt(p.tutar)}</td></tr>`;
+    }
+    tbl += '</tbody></table>';
+    body.innerHTML = tbl;
+
+    head.onclick = () => {
+      body.classList.toggle('hidden');
+      document.getElementById(`usta-chevron-${i}`).style.transform = body.classList.contains('hidden') ? 'rotate(0deg)' : 'rotate(90deg)';
+    };
+
+    wrap.appendChild(head);
+    wrap.appendChild(body);
+    el.appendChild(wrap);
   });
 }
 
