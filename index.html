@@ -270,6 +270,10 @@
   }
   .add-row-btn:hover{border-color:var(--indigo-light);background:var(--navy-800);}
 
+  .field-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+  .field-item label{display:block;font-size:11px;color:var(--ink-dim);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;}
+  .field-item input{width:100%;}
+
   /* ---------- summary panel ---------- */
   .summary{position:sticky;top:120px;display:flex;flex-direction:column;gap:12px;}
   .sum-card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;}
@@ -485,6 +489,8 @@
     <nav class="tabs" style="padding-top:0;margin-bottom:14px;">
       <button id="fisSubBtnYeni" class="active" onclick="switchFisSub('yeni')">Yeni Fiş</button>
       <button id="fisSubBtnGecmis" onclick="switchFisSub('gecmis')">Fiş Geçmişi</button>
+      <button id="fisSubBtnTeklif" onclick="switchFisSub('teklif')">Teklif</button>
+      <button id="fisSubBtnTeklifGecmis" onclick="switchFisSub('teklifGecmis')">Teklif Geçmişi</button>
     </nav>
 
     <div id="fisSubYeni">
@@ -546,6 +552,82 @@
         <div class="spacer"></div>
       </div>
       <div class="history-list" id="fisHistoryList">
+        <div class="empty">Yükleniyor…</div>
+      </div>
+    </div>
+
+    <!-- ===================== TEKLİF (YENİ) ===================== -->
+    <div id="fisSubTeklif" class="hidden">
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-head"><h3>Müşteri / Araç Bilgileri</h3></div>
+        <div class="card-body" style="padding:14px;">
+          <div class="field-grid">
+            <div class="field-item"><label>Cari Kod</label><input type="text" id="teklifCariKod"></div>
+            <div class="field-item"><label>Cari Adı</label><input type="text" id="teklifCariAdi"></div>
+            <div class="field-item"><label>Plaka</label><input type="text" id="teklifPlaka"></div>
+            <div class="field-item"><label>Telefon No</label><input type="text" id="teklifTelefon"></div>
+            <div class="field-item"><label>Şase No</label><input type="text" id="teklifSaseNo"></div>
+            <div class="field-item"><label>Araç Marka</label><input type="text" id="teklifMarka"></div>
+            <div class="field-item"><label>Model</label><input type="text" id="teklifModel"></div>
+            <div class="field-item"><label>Model Yılı</label><input type="text" id="teklifModelYili"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <div class="spacer"></div>
+        <button class="btn ghost" onclick="clearTeklif()">Temizle</button>
+        <button class="btn ghost" onclick="sendTeklifToFis()">📦 Siparişe Gönder</button>
+        <button class="btn" id="teklifKaydetBtn" onclick="saveTeklif()">Teklifi Kaydet</button>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>Ürünler</h3><span class="toplam">Genel Toplam (KDV Dahil): <b id="teklifGenelToplam">0,00</b></span></div>
+        <div class="card-body">
+          <table>
+            <thead><tr>
+              <th style="width:14%">Ürün Kodu</th>
+              <th>Ürün Adı</th>
+              <th style="width:7%">Adet</th>
+              <th style="width:13%">Fiyat (KDV Dahil)</th>
+              <th style="width:8%">İsk1 %</th>
+              <th style="width:8%">İsk2 %</th>
+              <th style="width:8%">KDV %</th>
+              <th style="width:12%">Tutar</th>
+              <th class="action-col"></th>
+            </tr></thead>
+            <tbody id="teklifRowsBody"></tbody>
+          </table>
+          <button class="add-row-btn" onclick="addTeklifRow()">+ Ürün Ekle</button>
+        </div>
+      </div>
+
+      <div class="grid" style="grid-template-columns:1fr 320px;margin-top:16px;">
+        <div></div>
+        <div class="sum-card">
+          <div class="sum-head">Teklif Özeti</div>
+          <div class="sum-body">
+            <div class="sum-row"><span>Ara Toplam (KDV Hariç)</span><b id="teklifAraToplam">0,00</b></div>
+            <div class="sum-row"><span>KDV Toplam</span><b id="teklifKdvToplam">0,00</b></div>
+            <div class="sum-row total"><span>Genel Toplam (KDV Dahil)</span><b id="teklifGenelToplam2">0,00</b></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===================== TEKLİF GEÇMİŞİ ===================== -->
+    <div id="fisSubTeklifGecmis" class="hidden">
+      <div class="toolbar">
+        <label>Tarih</label>
+        <input type="date" id="teklifFiltBaslangic">
+        <span style="color:var(--ink-dim);font-size:12px;">—</span>
+        <input type="date" id="teklifFiltBitis">
+        <label>Cari</label>
+        <input type="text" id="teklifFiltCari" placeholder="Cari ara..." style="width:160px;">
+        <button class="btn ghost" onclick="loadTeklifHistory()">Filtrele</button>
+        <div class="spacer"></div>
+      </div>
+      <div class="history-list" id="teklifHistoryList">
         <div class="empty">Yükleniyor…</div>
       </div>
     </div>
@@ -929,11 +1011,19 @@ function switchSide(side){
 }
 
 function switchFisSub(sub){
-  document.getElementById('fisSubBtnYeni').classList.toggle('active', sub === 'yeni');
-  document.getElementById('fisSubBtnGecmis').classList.toggle('active', sub === 'gecmis');
-  document.getElementById('fisSubYeni').classList.toggle('hidden', sub !== 'yeni');
-  document.getElementById('fisSubGecmis').classList.toggle('hidden', sub !== 'gecmis');
+  const tabs = {
+    yeni: { btn: 'fisSubBtnYeni', panel: 'fisSubYeni' },
+    gecmis: { btn: 'fisSubBtnGecmis', panel: 'fisSubGecmis' },
+    teklif: { btn: 'fisSubBtnTeklif', panel: 'fisSubTeklif' },
+    teklifGecmis: { btn: 'fisSubBtnTeklifGecmis', panel: 'fisSubTeklifGecmis' }
+  };
+  Object.keys(tabs).forEach(key => {
+    document.getElementById(tabs[key].btn).classList.toggle('active', key === sub);
+    document.getElementById(tabs[key].panel).classList.toggle('hidden', key !== sub);
+  });
   if (sub === 'gecmis') loadFisHistory();
+  if (sub === 'teklifGecmis') loadTeklifHistory();
+  if (sub === 'teklif' && !teklifRows.length){ teklifRows.push(newFisRow()); renderTeklifRows(); }
 }
 
 /* ============================================================
@@ -1658,14 +1748,17 @@ function fisRowKdvTutari(row){
   const haric = dahil / (1 + oran);
   return dahil - haric;
 }
-function computeFisTotals(){
+function computeRowsTotals(rows){
   let genelToplam = 0, kdvToplam = 0;
-  for (const row of fisRows){
+  for (const row of rows){
     genelToplam += fisRowTutar(row);       // KDV dahil
     kdvToplam += fisRowKdvTutari(row);
   }
   const araToplam = genelToplam - kdvToplam; // KDV hariç
   return { araToplam, kdvToplam, genelToplam };
+}
+function computeFisTotals(){
+  return computeRowsTotals(fisRows);
 }
 
 function addFisRow(){
@@ -1989,6 +2082,205 @@ async function loadFisHistory(){
       if (delErr){ toast('Silme hatası: ' + delErr.message, true); return; }
       toast('Fiş silindi ✓');
       loadFisHistory();
+    };
+    list.appendChild(div);
+  }
+}
+
+/* ============================================================
+   TEKLİF — çoklu ürün satırlı fiyat teklifi, "Siparişe Gönder" ile Fiş'e aktarılır
+   ============================================================ */
+let teklifRows = [];
+
+function addTeklifRow(){
+  teklifRows.push(newFisRow());
+  renderTeklifRows();
+}
+function removeTeklifRow(idx){
+  teklifRows.splice(idx, 1);
+  renderTeklifRows();
+}
+function updateTeklifCell(idx, field, value){
+  const row = teklifRows[idx];
+  if (field === 'kod' || field === 'ad') row[field] = value;
+  else row[field] = value === '' ? 0 : Number(value);
+  renderTeklifRowTutar(idx);
+  renderTeklifTotalsOnly();
+}
+function renderTeklifRowTutar(idx){
+  const el = document.getElementById(`teklif-tutar-${idx}`);
+  if (el) el.textContent = fmt(fisRowTutar(teklifRows[idx]));
+}
+function renderTeklifTotalsOnly(){
+  const t = computeRowsTotals(teklifRows);
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = fmt(val); };
+  set('teklifAraToplam', t.araToplam);
+  set('teklifKdvToplam', t.kdvToplam);
+  set('teklifGenelToplam', t.genelToplam);
+  set('teklifGenelToplam2', t.genelToplam);
+}
+function showTeklifUrunDropdown(idx, field, query){
+  const source = field === 'kod'
+    ? [...new Set(urunListe.map(u => u.kod).filter(Boolean))]
+    : [...new Set(urunListe.map(u => u.ad).filter(Boolean))];
+  showAutocompleteDropdown(`teklif-${field}-${idx}`, `teklif-${field}-dropdown-${idx}`, source, query, (value) => {
+    updateTeklifCell(idx, field, value);
+  });
+}
+
+function renderTeklifRows(){
+  const tbody = document.getElementById('teklifRowsBody');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  teklifRows.forEach((row, idx) => {
+    const tr = document.createElement('tr');
+    tr.className = 'row-line';
+    tr.innerHTML = `
+      <td style="position:relative;">
+        <input type="text" id="teklif-kod-${idx}" autocomplete="off" value="${escapeAttr(row.kod)}"
+          oninput="updateTeklifCell(${idx},'kod',this.value); showTeklifUrunDropdown(${idx},'kod',this.value)"
+          onfocus="showTeklifUrunDropdown(${idx},'kod',this.value)"
+          onblur="hideDropdownDelayed('teklif-kod-dropdown-${idx}')">
+        <div class="autocomplete-list hidden" id="teklif-kod-dropdown-${idx}"></div>
+      </td>
+      <td style="position:relative;">
+        <input type="text" id="teklif-ad-${idx}" autocomplete="off" value="${escapeAttr(row.ad)}"
+          oninput="updateTeklifCell(${idx},'ad',this.value); showTeklifUrunDropdown(${idx},'ad',this.value)"
+          onfocus="showTeklifUrunDropdown(${idx},'ad',this.value)"
+          onblur="hideDropdownDelayed('teklif-ad-dropdown-${idx}')">
+        <div class="autocomplete-list hidden" id="teklif-ad-dropdown-${idx}"></div>
+      </td>
+      <td class="tutar-col"><input type="number" step="1" value="${row.adet}" oninput="updateTeklifCell(${idx},'adet',this.value)"></td>
+      <td class="tutar-col"><input type="number" step="0.01" value="${row.fiyat}" oninput="updateTeklifCell(${idx},'fiyat',this.value)"></td>
+      <td class="tutar-col"><input type="number" step="1" value="${row.isk1}" oninput="updateTeklifCell(${idx},'isk1',this.value)"></td>
+      <td class="tutar-col"><input type="number" step="1" value="${row.isk2}" oninput="updateTeklifCell(${idx},'isk2',this.value)"></td>
+      <td class="tutar-col"><input type="number" step="1" value="${row.kdv}" oninput="updateTeklifCell(${idx},'kdv',this.value)"></td>
+      <td class="tutar-col"><span id="teklif-tutar-${idx}" style="font-variant-numeric:tabular-nums;">${fmt(fisRowTutar(row))}</span></td>
+      <td class="action-col"><button class="icon-btn" onclick="removeTeklifRow(${idx})">✕</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+  renderTeklifTotalsOnly();
+}
+
+function clearTeklif(){
+  const ok = teklifRows.length ? confirm('Teklifi temizlemek istediğine emin misin?') : true;
+  if (!ok) return;
+  ['teklifCariKod','teklifCariAdi','teklifPlaka','teklifTelefon','teklifSaseNo','teklifMarka','teklifModel','teklifModelYili'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  teklifRows = [];
+  renderTeklifRows();
+}
+
+async function saveTeklif(){
+  if (!teklifRows.length){ toast('Teklifte ürün yok', true); return; }
+  const get = (id) => document.getElementById(id).value.trim();
+  const t = computeRowsTotals(teklifRows);
+
+  const btn = document.getElementById('teklifKaydetBtn');
+  btn.disabled = true; btn.textContent = 'Kaydediliyor…';
+  try{
+    const { error } = await sb.from('teklifler').insert({
+      cari_kod: get('teklifCariKod') || null,
+      cari_adi: get('teklifCariAdi') || null,
+      plaka: get('teklifPlaka') || null,
+      telefon: get('teklifTelefon') || null,
+      sase_no: get('teklifSaseNo') || null,
+      marka: get('teklifMarka') || null,
+      model: get('teklifModel') || null,
+      model_yili: get('teklifModelYili') || null,
+      urunler: teklifRows,
+      ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
+      olusturan: currentUser
+    });
+    if (error) throw error;
+    toast('Teklif kaydedildi ✓');
+    for (const row of teklifRows){
+      if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat);
+    }
+  } catch(err){
+    toast('Teklif kaydedilemedi: ' + err.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Teklifi Kaydet';
+  }
+}
+
+// Ekrandaki (henüz kaydedilmemiş olabilecek) teklifi Fiş ekranına aktarır.
+function sendTeklifToFis(){
+  if (!teklifRows.length){ toast('Teklifte ürün yok', true); return; }
+  const cariAdi = document.getElementById('teklifCariAdi').value.trim();
+  const cariKod = document.getElementById('teklifCariKod').value.trim();
+  const plaka = document.getElementById('teklifPlaka').value.trim();
+  let cariText = cariAdi || cariKod || '';
+  if (plaka) cariText += (cariText ? ' — ' : '') + plaka;
+
+  fisRows = teklifRows.map(r => ({ ...r, _id: Math.random().toString(36).slice(2) }));
+  switchFisSub('yeni');
+  document.getElementById('fisCari').value = cariText;
+  renderFisRows();
+  toast('Teklif Fiş ekranına aktarıldı — kontrol edip kaydet ✓');
+}
+
+// Teklif Geçmişi'ndeki kayıtlı bir teklifi Fiş ekranına aktarır.
+function sendTeklifRecordToFis(rec){
+  let cariText = rec.cari_adi || rec.cari_kod || '';
+  if (rec.plaka) cariText += (cariText ? ' — ' : '') + rec.plaka;
+
+  fisRows = (rec.urunler || []).map(r => ({ ...r, _id: Math.random().toString(36).slice(2) }));
+  switchFisSub('yeni');
+  document.getElementById('fisCari').value = cariText;
+  renderFisRows();
+  toast('Teklif Fiş ekranına aktarıldı — kontrol edip kaydet ✓');
+}
+
+/* ============================================================
+   TEKLİF GEÇMİŞİ
+   ============================================================ */
+async function loadTeklifHistory(){
+  const list = document.getElementById('teklifHistoryList');
+  list.innerHTML = '<div class="empty">Yükleniyor…</div>';
+
+  let q = sb.from('teklifler').select('*').order('created_at', { ascending:false }).limit(100);
+  const b = document.getElementById('teklifFiltBaslangic').value;
+  const e = document.getElementById('teklifFiltBitis').value;
+  const cariFilt = document.getElementById('teklifFiltCari').value.trim();
+  if (b) q = q.gte('created_at', b + 'T00:00:00');
+  if (e) q = q.lte('created_at', e + 'T23:59:59');
+  if (cariFilt) q = q.ilike('cari_adi', `%${cariFilt}%`);
+
+  const { data, error } = await q;
+  if (error){ list.innerHTML = '<div class="empty">Hata: ' + error.message + '</div>'; return; }
+  if (!data || !data.length){ list.innerHTML = '<div class="empty">Teklif bulunamadı.</div>'; return; }
+
+  list.innerHTML = '';
+  for (const rec of data){
+    const dt = new Date(rec.created_at);
+    const aracBilgi = [rec.marka, rec.model, rec.model_yili].filter(Boolean).join(' ');
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    div.style.cursor = 'default';
+    div.innerHTML = `
+      <div>
+        <div class="date" style="font-size:13.5px;">${escapeAttr(rec.cari_adi || rec.cari_kod || 'Cari yok')}${rec.plaka ? ` <span style="font-weight:500;color:var(--ink-dim);">— ${escapeAttr(rec.plaka)}</span>` : ''}</div>
+        <div class="meta">${dt.toLocaleString('tr-TR')} · ${escapeAttr(rec.olusturan || '')}${aracBilgi ? ' · ' + escapeAttr(aracBilgi) : ''}</div>
+      </div>
+      <div class="nums">
+        <div><span>Teklif Tutarı</span>${fmt(rec.genel_toplam)}</div>
+      </div>
+      <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📦 Siparişe Gönder</button>
+      <button class="btn danger" style="padding:6px 12px;font-size:12px;">✕ Sil</button>
+    `;
+    const btns = div.querySelectorAll('button');
+    btns[0].onclick = () => sendTeklifRecordToFis(rec);
+    btns[1].onclick = async () => {
+      const ok = confirm(`${escapeAttr(rec.cari_adi || rec.cari_kod || 'Bu')} teklifini kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
+      if (!ok) return;
+      const { error: delErr } = await sb.from('teklifler').delete().eq('id', rec.id);
+      if (delErr){ toast('Silme hatası: ' + delErr.message, true); return; }
+      toast('Teklif silindi ✓');
+      loadTeklifHistory();
     };
     list.appendChild(div);
   }
