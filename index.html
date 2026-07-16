@@ -960,6 +960,13 @@ async function loadFoyForDate(force){
   if (!foy){
     foyId = null; foyExists = false;
     state = blankState(tarih);
+    const prevDevir = await fetchPreviousClosingDevir(tarih);
+    if (prevDevir){
+      state.nakit_devir = prevDevir.nakit_devir;
+      state.vakif_devir = prevDevir.vakif_devir;
+      state.ykb_devir = prevDevir.ykb_devir;
+      toast(`Devir ${formatDateTR(prevDevir.tarih)} tarihinden otomatik getirildi ✓`);
+    }
     setStatus('yeni','Yeni Föy');
     render();
     updateDeleteBtnState();
@@ -992,6 +999,38 @@ function setStatus(cls,label){
   const pill = document.getElementById('statusPill');
   pill.className = 'status-pill ' + cls;
   pill.textContent = label;
+}
+
+/* ============================================================
+   OTOMATİK DEVİR — bir önceki kayıtlı föyün kapanış bakiyelerini
+   (Nakit Durum, Vakıf/YKB Güncel Durum) yeni günün devir alanlarına taşır
+   ============================================================ */
+async function fetchPreviousClosingDevir(tarih){
+  const { data: prevFoy, error } = await sb.from('kasa_foyleri').select('*').lt('tarih', tarih).order('tarih', { ascending:false }).limit(1).maybeSingle();
+  if (error || !prevFoy) return null;
+
+  const prevState = blankState(prevFoy.tarih);
+  prevState.nakit_devir = Number(prevFoy.nakit_devir)||0;
+  prevState.vakif_devir = Number(prevFoy.vakif_devir)||0;
+  prevState.ykb_devir = Number(prevFoy.ykb_devir)||0;
+  prevState.kasa_mevcut = prevFoy.kasa_mevcut === null ? '' : Number(prevFoy.kasa_mevcut);
+
+  const { data: hareketler } = await sb.from('kasa_hareketleri').select('*').eq('foy_id', prevFoy.id);
+  for (const h of (hareketler||[])){
+    const bucket = prevState[h.islem_tipi] && prevState[h.islem_tipi][h.odeme_yontemi];
+    if (bucket){
+      bucket.push({ kod:h.kod||'', ad:h.ad||'', tutar:Number(h.tutar)||0, hesaba_gecen: h.hesaba_gecen===null?null:Number(h.hesaba_gecen), bayiye_direkt: !!h.bayiye_direkt, bayi_adi: h.bayi_adi||'' });
+    }
+  }
+
+  const r = computeSummary(prevState);
+  const round2 = (n) => Math.round((Number(n)||0) * 100) / 100;
+  return {
+    tarih: prevFoy.tarih,
+    nakit_devir: round2(r.nakitDurum),
+    vakif_devir: round2(r.vakifGuncelDurum),
+    ykb_devir: round2(r.ykbGuncelDurum)
+  };
 }
 
 /* ============================================================
@@ -1315,21 +1354,23 @@ function fmt(n){
 /* ============================================================
    SUMMARY / FORMÜLLER (spreadsheet'teki özet panel mantığı)
    ============================================================ */
-function sumRows(tip, key, field){
+function sumRows(tip, key, field, customState){
+  const st = customState || state;
   field = field || 'tutar';
-  return (state[tip][key]||[]).reduce((a,r)=> a + (Number(r[field])||0), 0);
+  return (st[tip][key]||[]).reduce((a,r)=> a + (Number(r[field])||0), 0);
 }
-function sumHesabaGecen(tip, key){
-  return (state[tip][key]||[]).reduce((a,r)=> a + (Number(r.hesaba_gecen)||0), 0);
+function sumHesabaGecen(tip, key, customState){
+  const st = customState || state;
+  return (st[tip][key]||[]).reduce((a,r)=> a + (Number(r.hesaba_gecen)||0), 0);
 }
 
-function computeSummary(){
-  const s = state;
+function computeSummary(customState){
+  const s = customState || state;
 
   // ---- BAYİYE DİREKT AKTARILAN (mail order pass-through) ----
   // Müşteriden alınan mail order tutarı hiç kasaya girmeden doğrudan parça bayisine gidiyor.
   // Satış tarafında tam giriliyor, burada hesaplanan tutar otomatik "ödeme" gibi düşülüyor.
-  const bayiyeAktarilanToplam = (state.satis.mailorder || [])
+  const bayiyeAktarilanToplam = (s.satis.mailorder || [])
     .filter(r => r.bayiye_direkt)
     .reduce((a,r) => a + (Number(r.tutar)||0), 0);
 
@@ -1337,49 +1378,49 @@ function computeSummary(){
   // Not: 'nakit' dışındaki tüm masraf kategorileri (banka + admin panelinden eklenen
   // özel kategoriler) banka tarafı gideri olarak sayılır — böylece admin yeni bir
   // masraf kategorisi eklediğinde otomatik olarak hesaplamaya dahil olur.
-  const masrafNakit = sumRows('masraf','nakit');
+  const masrafNakit = sumRows('masraf','nakit',undefined,s);
   const masrafBanka = SECTIONS.masraf.methods
     .filter(m => m.key !== 'nakit')
-    .reduce((a,m) => a + sumRows('masraf', m.key), 0);
+    .reduce((a,m) => a + sumRows('masraf', m.key, undefined, s), 0);
 
   // ---- NAKİT KASA ----
-  const nakitGiris = sumRows('satis','nakit') + sumRows('tahsilat','nakit');
-  const nakitCikis = sumRows('odeme','nakit') + masrafNakit;
+  const nakitGiris = sumRows('satis','nakit',undefined,s) + sumRows('tahsilat','nakit',undefined,s);
+  const nakitCikis = sumRows('odeme','nakit',undefined,s) + masrafNakit;
   const nakitDurum = Number(s.nakit_devir||0) + nakitGiris - nakitCikis;
   const kasaMevcut = s.kasa_mevcut === '' ? null : Number(s.kasa_mevcut);
   const fark = kasaMevcut === null ? null : (kasaMevcut - nakitDurum);
 
   // ---- KREDİ KASA (kart satış + tahsilat, komisyon düşülmüş net tutar) ----
   // Excel'deki Q14/Q15 formülü satış VE tahsilat kart tutarlarını birlikte toplar.
-  const vakifKrediSatisNet = sumHesabaGecen('satis','vakif_kredi');
-  const vakifKrediTahsilatNet = sumHesabaGecen('tahsilat','vakif_kredi');
+  const vakifKrediSatisNet = sumHesabaGecen('satis','vakif_kredi',s);
+  const vakifKrediTahsilatNet = sumHesabaGecen('tahsilat','vakif_kredi',s);
   const vakifbankToplamSatis = vakifKrediSatisNet + vakifKrediTahsilatNet;
 
-  const ykbKrediSatisNet = sumHesabaGecen('satis','ykb_kredi');
-  const ykbKrediTahsilatNet = sumHesabaGecen('tahsilat','ykb_kredi');
+  const ykbKrediSatisNet = sumHesabaGecen('satis','ykb_kredi',s);
+  const ykbKrediTahsilatNet = sumHesabaGecen('tahsilat','ykb_kredi',s);
   const ykbToplamSatis = ykbKrediSatisNet + ykbKrediTahsilatNet;
 
   const toplamKrediliSatis = vakifbankToplamSatis + ykbToplamSatis;
 
   // ---- MAİL ORDER KASA ----
-  const mailorderSatisTutar = sumRows('satis','mailorder');
-  const mailorderTahsilatTutar = sumRows('tahsilat','mailorder');
+  const mailorderSatisTutar = sumRows('satis','mailorder',undefined,s);
+  const mailorderTahsilatTutar = sumRows('tahsilat','mailorder',undefined,s);
   const mailorderSatisToplam = mailorderSatisTutar + mailorderTahsilatTutar; // Excel Q20 mantığı (satış+tahsilat)
-  const mailorderOdemeManuel = sumRows('odeme','mailorder');
+  const mailorderOdemeManuel = sumRows('odeme','mailorder',undefined,s);
   const mailorderOdemeToplam = mailorderOdemeManuel + bayiyeAktarilanToplam;
   const mailorderNetKasaEtkisi = mailorderSatisToplam - mailorderOdemeToplam;
 
   // ---- BANKA HAREKETLERİ ----
   const bankaDevir = Number(s.vakif_devir||0) + Number(s.ykb_devir||0);
 
-  const vakifGelenHavale = sumRows('satis','vakif_havale') + sumRows('tahsilat','vakif_havale');
-  const vakifGidenHavale = sumRows('odeme','vakif_havale');
+  const vakifGelenHavale = sumRows('satis','vakif_havale',undefined,s) + sumRows('tahsilat','vakif_havale',undefined,s);
+  const vakifGidenHavale = sumRows('odeme','vakif_havale',undefined,s);
   const vakifGunHareket = vakifGelenHavale - vakifGidenHavale;
   // Excel Q38: sadece devir + havale hareketi — kart satışları dahil değil.
   const vakifGuncelDurum = Number(s.vakif_devir||0) + vakifGunHareket;
 
-  const ykbGelenHavale = sumRows('satis','ykb_havale') + sumRows('tahsilat','ykb_havale');
-  const ykbGidenHavale = sumRows('odeme','ykb_havale');
+  const ykbGelenHavale = sumRows('satis','ykb_havale',undefined,s) + sumRows('tahsilat','ykb_havale',undefined,s);
+  const ykbGidenHavale = sumRows('odeme','ykb_havale',undefined,s);
   const ykbGunHareket = ykbGelenHavale - ykbGidenHavale;
   // Excel Q39: sadece devir + havale hareketi — kart satışları dahil değil.
   const ykbGuncelDurum = Number(s.ykb_devir||0) + ykbGunHareket;
