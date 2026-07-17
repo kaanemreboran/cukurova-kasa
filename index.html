@@ -2716,6 +2716,7 @@ async function loadFisHistory(){
    TEKLİF — çoklu ürün satırlı fiyat teklifi, "Siparişe Gönder" ile Fiş'e aktarılır
    ============================================================ */
 let teklifRows = [];
+let editingTeklifId = null; // null: yeni teklif; dolu: bu id'li teklif güncelleniyor
 
 function newTeklifRow(){
   return { kod:'', oem:'', marka:'', ad:'', adet:1, fiyat:0, isk1:0, isk2:0, kdv:20, _id: Math.random().toString(36).slice(2) };
@@ -2793,9 +2794,16 @@ function renderTeklifRows(){
   renderTeklifTotalsOnly();
 }
 
+function updateTeklifKaydetBtnLabel(){
+  const btn = document.getElementById('teklifKaydetBtn');
+  if (btn) btn.textContent = editingTeklifId ? 'Teklifi Güncelle' : 'Teklifi Kaydet';
+}
+
 function clearTeklif(){
   const ok = teklifRows.length ? confirm('Teklifi temizlemek istediğine emin misin?') : true;
   if (!ok) return;
+  editingTeklifId = null;
+  updateTeklifKaydetBtnLabel();
   ['teklifCariKod','teklifCariAdi','teklifPlaka','teklifTelefon','teklifSaseNo','teklifMarka','teklifModel','teklifModelYili'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
@@ -2804,36 +2812,64 @@ function clearTeklif(){
   renderTeklifRows();
 }
 
+// Teklif Geçmişi'ndeki kayıtlı bir teklifi düzenlemek için forma yükler.
+function editTeklifRecord(rec){
+  editingTeklifId = rec.id;
+  document.getElementById('teklifCariKod').value = rec.cari_kod || '';
+  document.getElementById('teklifCariAdi').value = rec.cari_adi || '';
+  document.getElementById('teklifPlaka').value = rec.plaka || '';
+  document.getElementById('teklifTelefon').value = rec.telefon || '';
+  document.getElementById('teklifSaseNo').value = rec.sase_no || '';
+  document.getElementById('teklifMarka').value = rec.marka || '';
+  document.getElementById('teklifModel').value = rec.model || '';
+  document.getElementById('teklifModelYili').value = rec.model_yili || '';
+  teklifRows = (rec.urunler || []).map(r => ({ ...r, _id: Math.random().toString(36).slice(2) }));
+  if (!teklifRows.length) teklifRows.push(newTeklifRow());
+  switchTeklifSub('yeni');
+  renderTeklifRows();
+  updateTeklifKaydetBtnLabel();
+  toast('Teklif düzenleme için yüklendi — değiştirip "Teklifi Güncelle"ye bas ✓');
+}
+
 async function saveTeklif(){
   if (!teklifRows.length){ toast('Teklifte ürün yok', true); return; }
   const get = (id) => document.getElementById(id).value.trim();
   const t = computeRowsTotals(teklifRows);
+  const payload = {
+    cari_kod: get('teklifCariKod') || null,
+    cari_adi: get('teklifCariAdi') || null,
+    plaka: get('teklifPlaka') || null,
+    telefon: get('teklifTelefon') || null,
+    sase_no: get('teklifSaseNo') || null,
+    marka: get('teklifMarka') || null,
+    model: get('teklifModel') || null,
+    model_yili: get('teklifModelYili') || null,
+    urunler: teklifRows,
+    ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
+    olusturan: currentUser
+  };
 
   const btn = document.getElementById('teklifKaydetBtn');
-  btn.disabled = true; btn.textContent = 'Kaydediliyor…';
+  btn.disabled = true; btn.textContent = editingTeklifId ? 'Güncelleniyor…' : 'Kaydediliyor…';
   try{
-    const { error } = await sb.from('teklifler').insert({
-      cari_kod: get('teklifCariKod') || null,
-      cari_adi: get('teklifCariAdi') || null,
-      plaka: get('teklifPlaka') || null,
-      telefon: get('teklifTelefon') || null,
-      sase_no: get('teklifSaseNo') || null,
-      marka: get('teklifMarka') || null,
-      model: get('teklifModel') || null,
-      model_yili: get('teklifModelYili') || null,
-      urunler: teklifRows,
-      ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
-      olusturan: currentUser
-    });
-    if (error) throw error;
-    toast('Teklif kaydedildi ✓');
+    if (editingTeklifId){
+      const { error } = await sb.from('teklifler').update(payload).eq('id', editingTeklifId);
+      if (error) throw error;
+      toast('Teklif güncellendi ✓');
+      editingTeklifId = null;
+    } else {
+      const { error } = await sb.from('teklifler').insert(payload);
+      if (error) throw error;
+      toast('Teklif kaydedildi ✓');
+    }
     for (const row of teklifRows){
       if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat);
     }
   } catch(err){
     toast('Teklif kaydedilemedi: ' + err.message, true);
   } finally {
-    btn.disabled = false; btn.textContent = 'Teklifi Kaydet';
+    btn.disabled = false;
+    updateTeklifKaydetBtnLabel();
   }
 }
 
@@ -2904,6 +2940,7 @@ async function loadTeklifHistory(){
         <div class="nums">
           <div><span>Teklif Tutarı</span>${fmt(rec.genel_toplam)}</div>
         </div>
+        <button class="btn ghost" style="padding:6px 12px;font-size:12px;">✏️ Düzenle</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📊 Excel</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📄 PDF</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📦 Siparişe Gönder</button>
@@ -2911,10 +2948,11 @@ async function loadTeklifHistory(){
       </div>
     `;
     const btns = div.querySelectorAll('button');
-    btns[0].onclick = () => exportTeklifExcel(rec);
-    btns[1].onclick = () => printTeklifPDF(rec);
-    btns[2].onclick = () => sendTeklifRecordToFis(rec);
-    btns[3].onclick = async () => {
+    btns[0].onclick = () => editTeklifRecord(rec);
+    btns[1].onclick = () => exportTeklifExcel(rec);
+    btns[2].onclick = () => printTeklifPDF(rec);
+    btns[3].onclick = () => sendTeklifRecordToFis(rec);
+    btns[4].onclick = async () => {
       const ok = confirm(`${escapeAttr(rec.cari_adi || rec.cari_kod || 'Bu')} teklifini kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
       if (!ok) return;
       const { error: delErr } = await sb.from('teklifler').delete().eq('id', rec.id);
@@ -3478,8 +3516,32 @@ document.addEventListener('focus', (e) => {
 }, true);
 
 document.addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
   const el = e.target;
+
+  // TAB: Fiş/Teklif ürün tablolarında son satırın son alanında Tab'a basınca
+  // otomatik yeni satır açılıp oraya geçilsin (tablo/Excel benzeri hızlı giriş).
+  if (e.key === 'Tab' && !e.shiftKey && el.tagName === 'INPUT'){
+    const tbodyId = el.closest('#fisRowsBody') ? 'fisRowsBody' : (el.closest('#teklifRowsBody') ? 'teklifRowsBody' : null);
+    if (tbodyId){
+      const tr = el.closest('tr');
+      const tbody = document.getElementById(tbodyId);
+      const isLastRow = tr && tr === tbody.lastElementChild;
+      const rowInputs = tr ? [...tr.querySelectorAll('input')] : [];
+      const isLastInputInRow = rowInputs.length && rowInputs[rowInputs.length - 1] === el;
+      if (isLastRow && isLastInputInRow){
+        e.preventDefault();
+        if (tbodyId === 'fisRowsBody') addFisRow(); else addTeklifRow();
+        setTimeout(() => {
+          const rows = document.querySelectorAll(`#${tbodyId} tr`);
+          const last = rows[rows.length - 1];
+          if (last) last.querySelector('input')?.focus();
+        }, 0);
+      }
+    }
+    return;
+  }
+
+  if (e.key !== 'Enter') return;
   if (el.tagName !== 'INPUT') return;
 
   // Giriş ekranı
@@ -3513,6 +3575,17 @@ document.addEventListener('keydown', (e) => {
     // yeni eklenen satırın ilk hücresine odaklan
     setTimeout(() => {
       const rows = document.querySelectorAll('#fisRowsBody tr');
+      const last = rows[rows.length - 1];
+      if (last) last.querySelector('input')?.focus();
+    }, 0);
+    return;
+  }
+  // Teklif — ürün satırı: Enter'a basınca yeni satır aç
+  if (el.closest('#teklifRowsBody')){
+    e.preventDefault();
+    addTeklifRow();
+    setTimeout(() => {
+      const rows = document.querySelectorAll('#teklifRowsBody tr');
       const last = rows[rows.length - 1];
       if (last) last.querySelector('input')?.focus();
     }, 0);
