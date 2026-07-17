@@ -371,6 +371,10 @@
   #printArea{display:none;}
   @media print{
     body *{visibility:hidden;}
+    /* ÖNEMLİ: visibility:hidden görünmez yapar ama yer kaplamaya devam eder.
+       Bu yüzden uygulamanın geri kalanını display:none ile tamamen düzen dışına alıyoruz —
+       yoksa gizli içerik fazladan (genelde boş) sayfalara taşabiliyor. */
+    #connWarning, header, .app-body, #accountOverlay, .toast{display:none !important;}
     #printArea, #printArea *{visibility:visible;}
     #printArea{display:block;position:absolute;top:0;left:0;width:100%;padding:20px;color:#000;background:#fff;}
     #printArea h1{font-size:18px;margin:0 0 2px;}
