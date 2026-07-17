@@ -2631,6 +2631,7 @@ async function printFis(){
     created_at: new Date().toISOString()
   };
 
+  let saved = false;
   try{
     const { error } = await sb.from('fisler').insert({
       fis_no, cari: cari || null, cari_kod: cariKod || null,
@@ -2639,6 +2640,7 @@ async function printFis(){
       olusturan: currentUser
     });
     if (error) throw error;
+    saved = true;
     if (cari || cariKod) saveCariIfNew(cari, cariKod); // sonraki fişte tek tıkla seçilebilsin diye kaydet
     for (const row of fisRows){
       if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat);
@@ -2651,6 +2653,14 @@ async function printFis(){
   document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(record);
   setPrintPageSize('A5', '8mm');
   window.print();
+
+  if (saved){
+    // Fiş başarıyla kaydedildi — bir sonraki fiş için formu temizle
+    document.getElementById('fisCariKod').value = '';
+    document.getElementById('fisCari').value = '';
+    fisRows = [];
+    renderFisRows();
+  }
 }
 
 /* ============================================================
@@ -2865,6 +2875,13 @@ async function saveTeklif(){
     for (const row of teklifRows){
       if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat);
     }
+    // Başarıyla kaydedildi/güncellendi — bir sonraki teklif için formu temizle
+    ['teklifCariKod','teklifCariAdi','teklifPlaka','teklifTelefon','teklifSaseNo','teklifMarka','teklifModel','teklifModelYili'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    teklifRows = [];
+    renderTeklifRows();
   } catch(err){
     toast('Teklif kaydedilemedi: ' + err.message, true);
   } finally {
