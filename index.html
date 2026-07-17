@@ -452,6 +452,7 @@
     <div class="side-label" style="margin-top:6px;">Diğer</div>
     <button id="sideBtnFis" onclick="switchSide('fis')"><span class="side-ico">🧾</span> Fiş</button>
     <button id="sideBtnTeklif" onclick="switchSide('teklif')"><span class="side-ico">📝</span> Teklif</button>
+    <button id="sideBtnKayitlar" onclick="switchSide('kayitlar')"><span class="side-ico">📇</span> Cari &amp; Ürün</button>
     <button id="sideBtnIstatistik" onclick="switchSide('istatistik')"><span class="side-ico">📊</span> İstatistik</button>
     <button id="sideBtnAdmin" onclick="switchSide('admin')"><span class="side-ico">⚙️</span> Admin</button>
   </aside>
@@ -774,6 +775,19 @@
       <div id="adminUserList"><div class="empty">Yükleniyor…</div></div>
     </div>
     <div class="admin-card">
+      <h3>Yedekleme</h3>
+      <p style="font-size:12.5px;color:var(--ink-dim);margin:0 0 12px;">
+        Tüm veriyi (föyler, hareketler, fişler, teklifler, cariler, ürünler, kullanıcılar, işlem günlüğü)
+        tek bir Excel dosyasına, her tablo ayrı sayfa halinde indirir. Düzenli aralıklarla (örn. haftada bir)
+        indirip bir yere kaydetmen önerilir.
+      </p>
+      <button class="btn" id="backupBtn" onclick="backupAllData()">💾 Tüm Verileri Yedekle</button>
+    </div>
+  </section>
+
+  <!-- ===================== CARİ & ÜRÜN YÖNETİMİ ===================== -->
+  <section id="tabKayitlar" class="hidden">
+    <div class="admin-card">
       <h3>Cariler / Ustalar</h3>
       <div class="toolbar" style="margin-bottom:14px;">
         <label>Cari Kod</label>
@@ -796,15 +810,6 @@
       </div>
       <div id="adminUrunErr" style="color:var(--red);font-size:12px;margin:-8px 0 10px;display:none;"></div>
       <div id="adminUrunList"><div class="empty">Yükleniyor…</div></div>
-    </div>
-    <div class="admin-card">
-      <h3>Yedekleme</h3>
-      <p style="font-size:12.5px;color:var(--ink-dim);margin:0 0 12px;">
-        Tüm veriyi (föyler, hareketler, fişler, teklifler, cariler, ürünler, kullanıcılar, işlem günlüğü)
-        tek bir Excel dosyasına, her tablo ayrı sayfa halinde indirir. Düzenli aralıklarla (örn. haftada bir)
-        indirip bir yere kaydetmen önerilir.
-      </p>
-      <button class="btn" id="backupBtn" onclick="backupAllData()">💾 Tüm Verileri Yedekle</button>
     </div>
   </section>
 
@@ -1077,24 +1082,27 @@ function switchSide(side){
   document.getElementById('sideBtnFoy').classList.toggle('active', side === 'foy');
   document.getElementById('sideBtnFis').classList.toggle('active', side === 'fis');
   document.getElementById('sideBtnTeklif').classList.toggle('active', side === 'teklif');
+  document.getElementById('sideBtnKayitlar').classList.toggle('active', side === 'kayitlar');
   document.getElementById('sideBtnIstatistik').classList.toggle('active', side === 'istatistik');
   document.getElementById('sideBtnAdmin').classList.toggle('active', side === 'admin');
 
   document.getElementById('foySubTabs').classList.toggle('hidden', side !== 'foy');
   document.getElementById('tabFis').classList.toggle('hidden', side !== 'fis');
   document.getElementById('tabTeklif').classList.toggle('hidden', side !== 'teklif');
+  document.getElementById('tabKayitlar').classList.toggle('hidden', side !== 'kayitlar');
   document.getElementById('tabIstatistik').classList.toggle('hidden', side !== 'istatistik');
   document.getElementById('tabAdmin').classList.toggle('hidden', side !== 'admin');
 
   if (side === 'foy'){
     switchTab('foy');
   } else {
-    // Föy alt sekmelerini gizle (Fiş/Teklif/İstatistik/Admin görüntülenirken)
+    // Föy alt sekmelerini gizle (Fiş/Teklif/Cari&Ürün/İstatistik/Admin görüntülenirken)
     document.getElementById('tabFoy').classList.add('hidden');
     document.getElementById('tabGecmis').classList.add('hidden');
     document.getElementById('tabHareketler').classList.add('hidden');
   }
   if (side === 'admin') loadAdminPanel();
+  if (side === 'kayitlar'){ loadAdminCariList(); loadAdminUrunList(); }
   if (side === 'fis'){
     if (!fisRows.length){ fisRows.push(newFisRow()); renderFisRows(); }
     if (!cariListeLoaded) loadCariListe();
@@ -1609,8 +1617,6 @@ async function adminDeleteUrun(id, kod, ad){
 function loadAdminPanel(){
   renderAdminCatList();
   loadAdminUsers();
-  loadAdminCariList();
-  loadAdminUrunList();
 }
 
 function updateCell(tip, key, idx, field, value){
