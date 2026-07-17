@@ -393,10 +393,10 @@
     #printArea .fis-copy:last-child{page-break-after:auto;}
     #printArea .fis-copy-label{font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#666;margin-bottom:2px;}
     /* A5 yatay (Fiş / Teklif PDF) için daha sıkı ölçekleme — A4 (Föy) buna dahil değil */
-    #printArea.print-a5{padding:10px;}
-    #printArea.print-a5 table{font-size:9.5px;margin-bottom:8px;}
-    #printArea.print-a5 th, #printArea.print-a5 td{padding:3px 5px;}
-    #printArea.print-a5 .p-summary{font-size:10px;gap:3px 14px;margin-top:6px;}
+    #printArea.print-a5{padding:8px;}
+    #printArea.print-a5 table{font-size:8px;margin-bottom:6px;}
+    #printArea.print-a5 th, #printArea.print-a5 td{padding:2px 3px;}
+    #printArea.print-a5 .p-summary{font-size:9px;gap:2px 10px;margin-top:5px;}
     #printArea.print-a5 .p-summary div{padding:1px 0;}
   }
 </style>
@@ -2233,7 +2233,7 @@ function buildTeklifPrintHTML(rec){
         ${rec.olusturan ? `<div>Hazırlayan: ${escapeAttr(rec.olusturan)}</div>` : ''}
       </div>
     </div>
-    <div class="p-summary" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px;">
+    <div class="p-summary" style="grid-template-columns:1fr 1fr;margin-bottom:8px;">
       ${rec.cari_kod ? `<div><span>CARİ KOD</span><b>${escapeAttr(rec.cari_kod)}</b></div>` : ''}
       ${rec.cari_adi ? `<div><span>CARİ ADI</span><b>${escapeAttr(rec.cari_adi)}</b></div>` : ''}
       ${rec.plaka ? `<div><span>PLAKA</span><b>${escapeAttr(rec.plaka)}</b></div>` : ''}
@@ -2264,7 +2264,7 @@ function buildTeklifPrintHTML(rec){
 function printTeklifPDF(rec){
   document.getElementById('printArea').className = 'print-a5';
   document.getElementById('printArea').innerHTML = buildTeklifPrintHTML(rec);
-  setPrintPageSize('A5 landscape', '8mm');
+  setPrintPageSize('A5', '8mm');
   window.print();
 }
 
@@ -2325,7 +2325,7 @@ async function printFis(){
 
   document.getElementById('printArea').className = 'print-a5';
   document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(record);
-  setPrintPageSize('A5 landscape', '8mm');
+  setPrintPageSize('A5', '8mm');
   window.print();
 }
 
@@ -2370,7 +2370,7 @@ async function loadFisHistory(){
     div.querySelectorAll('button')[0].onclick = () => {
       document.getElementById('printArea').className = 'print-a5';
       document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(rec);
-      setPrintPageSize('A5 landscape', '8mm');
+      setPrintPageSize('A5', '8mm');
       window.print();
     };
     div.querySelectorAll('button')[1].onclick = async () => {
