@@ -634,14 +634,16 @@
         <div class="card-body">
           <table>
             <thead><tr>
-              <th style="width:14%">Ürün Kodu</th>
+              <th style="width:11%">Ürün Kodu</th>
+              <th style="width:11%">OEM</th>
+              <th style="width:11%">Marka</th>
               <th>Ürün Adı</th>
-              <th style="width:7%">Adet</th>
-              <th style="width:13%">Fiyat (KDV Dahil)</th>
-              <th style="width:8%">İsk1 %</th>
-              <th style="width:8%">İsk2 %</th>
-              <th style="width:8%">KDV %</th>
-              <th style="width:12%">Tutar</th>
+              <th style="width:6%">Adet</th>
+              <th style="width:11%">Fiyat (KDV Dahil)</th>
+              <th style="width:7%">İsk1 %</th>
+              <th style="width:7%">İsk2 %</th>
+              <th style="width:7%">KDV %</th>
+              <th style="width:10%">Tutar</th>
               <th class="action-col"></th>
             </tr></thead>
             <tbody id="teklifRowsBody"></tbody>
@@ -1081,7 +1083,7 @@ function switchSide(side){
     if (!urunListeLoaded) loadUrunListe();
   }
   if (side === 'teklif'){
-    if (!teklifRows.length){ teklifRows.push(newFisRow()); renderTeklifRows(); }
+    if (!teklifRows.length){ teklifRows.push(newTeklifRow()); renderTeklifRows(); }
     if (!cariListeLoaded) loadCariListe();
     if (!urunListeLoaded) loadUrunListe();
   }
@@ -2234,12 +2236,12 @@ function buildTeklifPrintHTML(rec){
       ${aracBilgi ? `<div><span>ARAÇ</span><b>${escapeAttr(aracBilgi)}</b></div>` : ''}
     </div>
     <table><thead><tr>
-      <th>ÜRÜN KODU</th><th>ÜRÜN ADI</th><th>AD</th><th>FİYAT (KDV DAHİL)</th><th>İSK1</th><th>İSK2</th><th>KDV</th><th>TUTAR</th>
+      <th>ÜRÜN KODU</th><th>OEM</th><th>MARKA</th><th>ÜRÜN ADI</th><th>AD</th><th>FİYAT (KDV DAHİL)</th><th>İSK1</th><th>İSK2</th><th>KDV</th><th>TUTAR</th>
     </tr></thead><tbody>
   `;
   for (const row of (rec.urunler || [])){
     html += `<tr>
-      <td>${escapeAttr(row.kod)}</td><td>${escapeAttr(row.ad)}</td><td>${row.adet}</td>
+      <td>${escapeAttr(row.kod)}</td><td>${escapeAttr(row.oem)}</td><td>${escapeAttr(row.marka)}</td><td>${escapeAttr(row.ad)}</td><td>${row.adet}</td>
       <td>${fmt(row.fiyat)}</td><td>${row.isk1}</td><td>${row.isk2}</td><td>${row.kdv}</td>
       <td>${fmt(fisRowTutar(row))}</td>
     </tr>`;
@@ -2379,8 +2381,11 @@ async function loadFisHistory(){
    ============================================================ */
 let teklifRows = [];
 
+function newTeklifRow(){
+  return { kod:'', oem:'', marka:'', ad:'', adet:1, fiyat:0, isk1:0, isk2:0, kdv:20, _id: Math.random().toString(36).slice(2) };
+}
 function addTeklifRow(){
-  teklifRows.push(newFisRow());
+  teklifRows.push(newTeklifRow());
   renderTeklifRows();
 }
 function removeTeklifRow(idx){
@@ -2389,7 +2394,7 @@ function removeTeklifRow(idx){
 }
 function updateTeklifCell(idx, field, value){
   const row = teklifRows[idx];
-  if (field === 'kod' || field === 'ad') row[field] = value;
+  if (field === 'kod' || field === 'oem' || field === 'marka' || field === 'ad') row[field] = value;
   else row[field] = value === '' ? 0 : Number(value);
   renderTeklifRowTutar(idx);
   renderTeklifTotalsOnly();
@@ -2430,6 +2435,8 @@ function renderTeklifRows(){
           onblur="hideDropdownDelayed('teklif-kod-dropdown-${idx}')">
         <div class="autocomplete-list hidden" id="teklif-kod-dropdown-${idx}"></div>
       </td>
+      <td><input type="text" value="${escapeAttr(row.oem)}" oninput="updateTeklifCell(${idx},'oem',this.value)"></td>
+      <td><input type="text" value="${escapeAttr(row.marka)}" oninput="updateTeklifCell(${idx},'marka',this.value)"></td>
       <td style="position:relative;">
         <input type="text" id="teklif-ad-${idx}" autocomplete="off" value="${escapeAttr(row.ad)}"
           oninput="updateTeklifCell(${idx},'ad',this.value); showTeklifUrunDropdown(${idx},'ad',this.value)"
