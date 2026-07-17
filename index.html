@@ -2317,7 +2317,7 @@ async function printFis(){
   }
 
   document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(record);
-  setPrintPageSize('A4 landscape', '12mm');
+  setPrintPageSize('A4', '15mm');
   window.print();
 }
 
@@ -2361,7 +2361,7 @@ async function loadFisHistory(){
     `;
     div.querySelectorAll('button')[0].onclick = () => {
       document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(rec);
-      setPrintPageSize('A4 landscape', '12mm');
+      setPrintPageSize('A4', '15mm');
       window.print();
     };
     div.querySelectorAll('button')[1].onclick = async () => {
