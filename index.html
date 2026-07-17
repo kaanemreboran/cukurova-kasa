@@ -522,6 +522,12 @@
 
     <div id="fisSubYeni">
       <div class="toolbar" style="position:relative;">
+        <label>Cari Kod</label>
+        <input type="text" id="fisCariKod" autocomplete="off" placeholder="Cari kodu" style="width:140px;"
+          oninput="showFisCariKodDropdown(this.value)"
+          onfocus="showFisCariKodDropdown(this.value)"
+          onblur="hideDropdownDelayed('fisCariKodDropdown')">
+        <div class="autocomplete-list hidden" id="fisCariKodDropdown"></div>
         <label>Cari / Usta</label>
         <input type="text" id="fisCari" autocomplete="off" placeholder="Örn: ÇOPUR OTO / HÜSEYİN ÇOPUR" style="flex:1;min-width:220px;"
           oninput="showCariDropdown(this.value)"
@@ -759,6 +765,8 @@
     <div class="admin-card">
       <h3>Cariler / Ustalar</h3>
       <div class="toolbar" style="margin-bottom:14px;">
+        <label>Cari Kod</label>
+        <input type="text" id="adminCariKod" placeholder="Cari kodu" style="width:140px;">
         <label>Cari / Usta Adı</label>
         <input type="text" id="adminCariAdi" placeholder="Örn: HÜSEYİN ÇOPUR" style="flex:1;min-width:200px;">
         <button class="btn" onclick="adminAddCari()">Cari Ekle</button>
@@ -1479,14 +1487,17 @@ async function loadAdminUsers(){
 async function adminAddCari(){
   const el = (id) => document.getElementById(id);
   el('adminCariErr').style.display = 'none';
+  const kod = el('adminCariKod').value.trim();
   const ad = el('adminCariAdi').value.trim();
-  if (!ad){ el('adminCariErr').textContent = 'Cari adı gerekli'; el('adminCariErr').style.display = 'block'; return; }
+  if (!ad && !kod){ el('adminCariErr').textContent = 'Cari adı veya kodu gerekli'; el('adminCariErr').style.display = 'block'; return; }
   try{
-    const { error } = await sb.from('fis_cariler').insert({ ad });
+    const { error } = await sb.from('fis_cariler').insert({ ad: ad || null, kod: kod || null });
     if (error) throw error;
+    el('adminCariKod').value = '';
     el('adminCariAdi').value = '';
     toast('Cari eklendi ✓');
-    if (!cariListe.includes(ad)){ cariListe.push(ad); cariListe.sort(); }
+    if (ad && !cariListe.includes(ad)){ cariListe.push(ad); cariListe.sort(); }
+    if (kod && !cariKodListe.includes(kod)){ cariKodListe.push(kod); cariKodListe.sort(); }
     loadAdminCariList();
   } catch(err){
     el('adminCariErr').textContent = 'Hata: ' + err.message; el('adminCariErr').style.display = 'block';
@@ -1495,26 +1506,27 @@ async function adminAddCari(){
 
 async function loadAdminCariList(){
   const el = document.getElementById('adminCariList');
-  const { data, error } = await sb.from('fis_cariler').select('id, ad').order('ad');
+  const { data, error } = await sb.from('fis_cariler').select('id, kod, ad').order('ad');
   if (error){ el.innerHTML = '<div class="empty">Hata: ' + error.message + '</div>'; return; }
   if (!data || !data.length){ el.innerHTML = '<div class="empty">Henüz cari eklenmedi.</div>'; return; }
   el.innerHTML = '';
   for (const c of data){
     const row = document.createElement('div');
     row.className = 'admin-cat-row';
-    row.innerHTML = `<span>${escapeAttr(c.ad)}</span><button class="icon-btn" title="Sil">✕</button>`;
-    row.querySelector('button').onclick = () => adminDeleteCari(c.id, c.ad);
+    row.innerHTML = `<span>${c.kod ? `<span class="tip-badge">${escapeAttr(c.kod)}</span>` : ''}${escapeAttr(c.ad || '')}</span><button class="icon-btn" title="Sil">✕</button>`;
+    row.querySelector('button').onclick = () => adminDeleteCari(c.id, c.kod, c.ad);
     el.appendChild(row);
   }
 }
 
-async function adminDeleteCari(id, ad){
-  const ok = confirm(`"${ad}" adlı cariyi silmek istediğine emin misin?`);
+async function adminDeleteCari(id, kod, ad){
+  const ok = confirm(`"${ad || kod}" adlı cariyi silmek istediğine emin misin?`);
   if (!ok) return;
   try{
     const { error } = await sb.from('fis_cariler').delete().eq('id', id);
     if (error) throw error;
-    cariListe = cariListe.filter(a => a !== ad);
+    if (ad) cariListe = cariListe.filter(a => a !== ad);
+    if (kod) cariKodListe = cariKodListe.filter(k => k !== kod);
     toast('Cari silindi ✓');
     loadAdminCariList();
   } catch(err){
@@ -2005,26 +2017,34 @@ function renderFisRows(){
 /* ============================================================
    CARİ / USTA HIZLI SEÇİM (bir kere girilen isim tekrar yazılmasın)
    ============================================================ */
-let cariListe = [];
+let cariListe = [];      // cari adları (Cari/Usta alanı için)
+let cariKodListe = [];   // cari kodları (Cari Kod alanı için)
 let cariListeLoaded = false;
 
 async function loadCariListe(){
-  const { data, error } = await sb.from('fis_cariler').select('ad').order('ad');
+  const { data, error } = await sb.from('fis_cariler').select('kod, ad').order('ad');
   if (error) return;
-  cariListe = (data || []).map(r => r.ad);
+  cariListe = (data || []).map(r => r.ad).filter(Boolean);
+  cariKodListe = [...new Set((data || []).map(r => r.kod).filter(Boolean))];
   cariListeLoaded = true;
 }
 
 function showCariDropdown(query, inputId, dropdownId){
   showAutocompleteDropdown(inputId || 'fisCari', dropdownId || 'fisCariDropdown', cariListe, query, () => {}, 3);
 }
+function showFisCariKodDropdown(query){
+  showAutocompleteDropdown('fisCariKod', 'fisCariKodDropdown', cariKodListe, query, () => {}, 3);
+}
 
-async function saveCariIfNew(ad){
-  if (cariListe.includes(ad)) return;
-  const { error } = await sb.from('fis_cariler').insert({ ad }).select();
+// Fiş kaydedilince, o fişte kullanılan cari kodu/adı daha önce yoksa listeye ekler.
+async function saveCariIfNew(ad, kod){
+  const adExists = !ad || cariListe.includes(ad);
+  const kodExists = !kod || cariKodListe.includes(kod);
+  if (adExists && kodExists) return;
+  const { error } = await sb.from('fis_cariler').insert({ ad: ad || null, kod: kod || null }).select();
   if (!error){
-    cariListe.push(ad);
-    cariListe.sort();
+    if (ad && !cariListe.includes(ad)){ cariListe.push(ad); cariListe.sort(); }
+    if (kod && !cariKodListe.includes(kod)){ cariKodListe.push(kod); cariKodListe.sort(); }
   }
   // zaten varsa (unique constraint) sessizce geç
 }
@@ -2115,6 +2135,7 @@ function hideUrunDropdownDelayed(idx, field){
 function clearFis(){
   const ok = fisRows.length ? confirm('Fişi temizlemek istediğine emin misin?') : true;
   if (!ok) return;
+  document.getElementById('fisCariKod').value = '';
   document.getElementById('fisCari').value = '';
   fisRows = [];
   renderFisRows();
@@ -2151,7 +2172,7 @@ function buildFisPrintHTML(rec, copyLabel){
         <div>${tarihStr}</div>
       </div>
     </div>
-    <div style="font-size:13px;font-weight:700;margin-bottom:14px;">${escapeAttr(rec.cari || '—')}</div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:14px;">${rec.cari_kod ? `<span style="color:#666;font-weight:600;">[${escapeAttr(rec.cari_kod)}]</span> ` : ''}${escapeAttr(rec.cari || '—')}</div>
     <table><thead><tr>
       <th>ÜRÜN KODU</th><th>ÜRÜN ADI</th><th>AD</th><th>FİYAT (KDV DAHİL)</th><th>İSK1</th><th>İSK2</th><th>KDV</th><th>TUTAR</th>
     </tr></thead><tbody>
@@ -2183,12 +2204,13 @@ function buildFisDoubleCopyHTML(rec){
 
 async function printFis(){
   if (!fisRows.length){ toast('Fişte ürün yok', true); return; }
+  const cariKod = document.getElementById('fisCariKod').value.trim();
   const cari = document.getElementById('fisCari').value.trim();
   const t = computeFisTotals();
   const fis_no = await getNextFisNo();
 
   const record = {
-    fis_no, cari,
+    fis_no, cari, cari_kod: cariKod,
     urunler: fisRows,
     ara_toplam: t.araToplam,
     kdv_toplam: t.kdvToplam,
@@ -2198,13 +2220,13 @@ async function printFis(){
 
   try{
     const { error } = await sb.from('fisler').insert({
-      fis_no, cari: cari || null,
+      fis_no, cari: cari || null, cari_kod: cariKod || null,
       urunler: fisRows,
       ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
       olusturan: currentUser
     });
     if (error) throw error;
-    if (cari) saveCariIfNew(cari); // sonraki fişte tek tıkla seçilebilsin diye kaydet
+    if (cari || cariKod) saveCariIfNew(cari, cariKod); // sonraki fişte tek tıkla seçilebilsin diye kaydet
     for (const row of fisRows){
       if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat);
     }
@@ -2244,7 +2266,7 @@ async function loadFisHistory(){
     div.style.cursor = 'default';
     div.innerHTML = `
       <div>
-        <div class="date" style="font-size:13.5px;">${escapeAttr(rec.fis_no)} <span style="font-weight:500;color:var(--ink-dim);">— ${escapeAttr(rec.cari || 'Cari yok')}</span></div>
+        <div class="date" style="font-size:13.5px;">${escapeAttr(rec.fis_no)} <span style="font-weight:500;color:var(--ink-dim);">— ${rec.cari_kod ? `[${escapeAttr(rec.cari_kod)}] ` : ''}${escapeAttr(rec.cari || 'Cari yok')}</span></div>
         <div class="meta">${dt.toLocaleString('tr-TR')} · ${escapeAttr(rec.olusturan || '')}</div>
       </div>
       <div class="history-actions">
@@ -2398,12 +2420,13 @@ function sendTeklifToFis(){
   const cariAdi = document.getElementById('teklifCariAdi').value.trim();
   const cariKod = document.getElementById('teklifCariKod').value.trim();
   const plaka = document.getElementById('teklifPlaka').value.trim();
-  let cariText = cariAdi || cariKod || '';
+  let cariText = cariAdi || '';
   if (plaka) cariText += (cariText ? ' — ' : '') + plaka;
 
   fisRows = teklifRows.map(r => ({ ...r, _id: Math.random().toString(36).slice(2) }));
   switchSide('fis');
   switchFisSub('yeni');
+  document.getElementById('fisCariKod').value = cariKod;
   document.getElementById('fisCari').value = cariText;
   renderFisRows();
   toast('Teklif Fiş ekranına aktarıldı — kontrol edip kaydet ✓');
@@ -2411,12 +2434,13 @@ function sendTeklifToFis(){
 
 // Teklif Geçmişi'ndeki kayıtlı bir teklifi Fiş ekranına aktarır.
 function sendTeklifRecordToFis(rec){
-  let cariText = rec.cari_adi || rec.cari_kod || '';
+  let cariText = rec.cari_adi || '';
   if (rec.plaka) cariText += (cariText ? ' — ' : '') + rec.plaka;
 
   fisRows = (rec.urunler || []).map(r => ({ ...r, _id: Math.random().toString(36).slice(2) }));
   switchSide('fis');
   switchFisSub('yeni');
+  document.getElementById('fisCariKod').value = rec.cari_kod || '';
   document.getElementById('fisCari').value = cariText;
   renderFisRows();
   toast('Teklif Fiş ekranına aktarıldı — kontrol edip kaydet ✓');
