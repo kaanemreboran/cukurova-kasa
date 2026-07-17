@@ -253,10 +253,17 @@
     .toolbar label{margin:2px 0 -4px;}
     .toolbar input, .toolbar select{width:100% !important;}
     .toolbar > button.btn{width:100%;}
+    /* "Başlangıç — Bitiş" gibi tarih ayraçları alt alta dizilince tek başına
+       sola yapışıp eğri görünüyordu — dar ekranda gizle, aralarındaki boşluk yeterli. */
+    .toolbar .toolbar-sep{display:none;}
+
+    /* Rozet/etiket gibi küçük öğeler (durum pili vb.) dikey toolbar'da
+       tam genişliğe gerilip devasa/eğri görünmesin — kendi doğal boyutunda kalsın. */
+    .toolbar .status-pill{align-self:flex-start;}
 
     .field-grid{grid-template-columns:1fr 1fr;}
     .history-item{padding:12px;}
-    .history-actions{width:100%;justify-content:space-between;}
+    .history-actions{width:100%;justify-content:flex-end;}
   }
 
   .col-forms{display:flex;flex-direction:column;gap:16px;}
@@ -526,7 +533,7 @@
     <div class="toolbar">
       <label>Ara</label>
       <input type="date" id="filtBaslangic">
-      <span style="color:var(--ink-dim);font-size:12px;">—</span>
+      <span class="toolbar-sep" style="color:var(--ink-dim);font-size:12px;">—</span>
       <input type="date" id="filtBitis">
       <button class="btn ghost" onclick="loadHistory()">Filtrele</button>
       <div class="spacer"></div>
@@ -618,7 +625,7 @@
       <div class="toolbar">
         <label>Tarih</label>
         <input type="date" id="fisFiltBaslangic">
-        <span style="color:var(--ink-dim);font-size:12px;">—</span>
+        <span class="toolbar-sep" style="color:var(--ink-dim);font-size:12px;">—</span>
         <input type="date" id="fisFiltBitis">
         <label>Cari</label>
         <input type="text" id="fisFiltCari" placeholder="Cari ara..." style="width:160px;">
@@ -713,7 +720,7 @@
       <div class="toolbar">
         <label>Tarih</label>
         <input type="date" id="teklifFiltBaslangic">
-        <span style="color:var(--ink-dim);font-size:12px;">—</span>
+        <span class="toolbar-sep" style="color:var(--ink-dim);font-size:12px;">—</span>
         <input type="date" id="teklifFiltBitis">
         <label>Cari</label>
         <input type="text" id="teklifFiltCari" placeholder="Cari ara..." style="width:160px;">
