@@ -1090,12 +1090,16 @@ async function loadFoyForDate(force){
   if (!foy){
     foyId = null; foyExists = false;
     state = blankState(tarih);
-    const prevDevir = await fetchPreviousClosingDevir(tarih);
-    if (prevDevir){
-      state.nakit_devir = prevDevir.nakit_devir;
-      state.vakif_devir = prevDevir.vakif_devir;
-      state.ykb_devir = prevDevir.ykb_devir;
-      toast(`Devir ${formatDateTR(prevDevir.tarih)} tarihinden otomatik getirildi ✓`);
+    try{
+      const prevDevir = await fetchPreviousClosingDevir(tarih);
+      if (prevDevir){
+        state.nakit_devir = prevDevir.nakit_devir;
+        state.vakif_devir = prevDevir.vakif_devir;
+        state.ykb_devir = prevDevir.ykb_devir;
+        toast(`Devir ${formatDateTR(prevDevir.tarih)} tarihinden otomatik getirildi ✓`);
+      }
+    } catch(err){
+      toast('Devir otomatik getirilemedi (bağlantı sorunu olabilir) — lütfen "Yeniden Yükle"ye bas veya devri elle gir: ' + err.message, true);
     }
     setStatus('yeni','Yeni Föy');
     render();
@@ -1137,7 +1141,8 @@ function setStatus(cls,label){
    ============================================================ */
 async function fetchPreviousClosingDevir(tarih){
   const { data: prevFoy, error } = await sb.from('kasa_foyleri').select('*').lt('tarih', tarih).order('tarih', { ascending:false }).limit(1).maybeSingle();
-  if (error || !prevFoy) return null;
+  if (error) throw error;
+  if (!prevFoy) return null;
 
   const prevState = blankState(prevFoy.tarih);
   prevState.nakit_devir = Number(prevFoy.nakit_devir)||0;
@@ -1145,7 +1150,8 @@ async function fetchPreviousClosingDevir(tarih){
   prevState.ykb_devir = Number(prevFoy.ykb_devir)||0;
   prevState.kasa_mevcut = prevFoy.kasa_mevcut === null ? '' : Number(prevFoy.kasa_mevcut);
 
-  const { data: hareketler } = await sb.from('kasa_hareketleri').select('*').eq('foy_id', prevFoy.id);
+  const { data: hareketler, error: hErr } = await sb.from('kasa_hareketleri').select('*').eq('foy_id', prevFoy.id);
+  if (hErr) throw hErr; // ÖNEMLİ: sessizce yutulursa o günün hareketleri yokmuş gibi hesaplanır — yanlış (eksik) devir üretir
   for (const h of (hareketler||[])){
     const bucket = prevState[h.islem_tipi] && prevState[h.islem_tipi][h.odeme_yontemi];
     if (bucket){
@@ -2067,7 +2073,7 @@ async function printFis(){
   }
 
   document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(record);
-  setPrintPageSize('A5', '8mm');
+  setPrintPageSize('A5 landscape', '8mm');
   window.print();
 }
 
@@ -2109,7 +2115,7 @@ async function loadFisHistory(){
     `;
     div.querySelectorAll('button')[0].onclick = () => {
       document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(rec);
-      setPrintPageSize('A5', '8mm');
+      setPrintPageSize('A5 landscape', '8mm');
       window.print();
     };
     div.querySelectorAll('button')[1].onclick = async () => {
