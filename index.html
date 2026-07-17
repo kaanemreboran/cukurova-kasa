@@ -756,6 +756,28 @@
       <div id="adminUserErr" style="color:var(--red);font-size:12px;margin:-8px 0 10px;display:none;"></div>
       <div id="adminUserList"><div class="empty">Yükleniyor…</div></div>
     </div>
+    <div class="admin-card">
+      <h3>Cariler / Ustalar</h3>
+      <div class="toolbar" style="margin-bottom:14px;">
+        <label>Cari / Usta Adı</label>
+        <input type="text" id="adminCariAdi" placeholder="Örn: HÜSEYİN ÇOPUR" style="flex:1;min-width:200px;">
+        <button class="btn" onclick="adminAddCari()">Cari Ekle</button>
+      </div>
+      <div id="adminCariErr" style="color:var(--red);font-size:12px;margin:-8px 0 10px;display:none;"></div>
+      <div id="adminCariList"><div class="empty">Yükleniyor…</div></div>
+    </div>
+    <div class="admin-card">
+      <h3>Ürünler</h3>
+      <div class="toolbar" style="margin-bottom:14px;">
+        <label>Ürün Kodu</label>
+        <input type="text" id="adminUrunKod" placeholder="Örn: 6PK1530" style="width:160px;">
+        <label>Ürün Adı</label>
+        <input type="text" id="adminUrunAd" placeholder="Örn: V KAYIŞI ZEGEN" style="flex:1;min-width:200px;">
+        <button class="btn" onclick="adminAddUrun()">Ürün Ekle</button>
+      </div>
+      <div id="adminUrunErr" style="color:var(--red);font-size:12px;margin:-8px 0 10px;display:none;"></div>
+      <div id="adminUrunList"><div class="empty">Yükleniyor…</div></div>
+    </div>
   </section>
 
 </main>
@@ -1451,9 +1473,111 @@ async function loadAdminUsers(){
   }
 }
 
+/* ============================================================
+   ADMIN — CARİLER / USTALAR (ekle / sil)
+   ============================================================ */
+async function adminAddCari(){
+  const el = (id) => document.getElementById(id);
+  el('adminCariErr').style.display = 'none';
+  const ad = el('adminCariAdi').value.trim();
+  if (!ad){ el('adminCariErr').textContent = 'Cari adı gerekli'; el('adminCariErr').style.display = 'block'; return; }
+  try{
+    const { error } = await sb.from('fis_cariler').insert({ ad });
+    if (error) throw error;
+    el('adminCariAdi').value = '';
+    toast('Cari eklendi ✓');
+    if (!cariListe.includes(ad)){ cariListe.push(ad); cariListe.sort(); }
+    loadAdminCariList();
+  } catch(err){
+    el('adminCariErr').textContent = 'Hata: ' + err.message; el('adminCariErr').style.display = 'block';
+  }
+}
+
+async function loadAdminCariList(){
+  const el = document.getElementById('adminCariList');
+  const { data, error } = await sb.from('fis_cariler').select('id, ad').order('ad');
+  if (error){ el.innerHTML = '<div class="empty">Hata: ' + error.message + '</div>'; return; }
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">Henüz cari eklenmedi.</div>'; return; }
+  el.innerHTML = '';
+  for (const c of data){
+    const row = document.createElement('div');
+    row.className = 'admin-cat-row';
+    row.innerHTML = `<span>${escapeAttr(c.ad)}</span><button class="icon-btn" title="Sil">✕</button>`;
+    row.querySelector('button').onclick = () => adminDeleteCari(c.id, c.ad);
+    el.appendChild(row);
+  }
+}
+
+async function adminDeleteCari(id, ad){
+  const ok = confirm(`"${ad}" adlı cariyi silmek istediğine emin misin?`);
+  if (!ok) return;
+  try{
+    const { error } = await sb.from('fis_cariler').delete().eq('id', id);
+    if (error) throw error;
+    cariListe = cariListe.filter(a => a !== ad);
+    toast('Cari silindi ✓');
+    loadAdminCariList();
+  } catch(err){
+    toast('Silme hatası: ' + err.message, true);
+  }
+}
+
+/* ============================================================
+   ADMIN — ÜRÜNLER (ekle / sil)
+   ============================================================ */
+async function adminAddUrun(){
+  const el = (id) => document.getElementById(id);
+  el('adminUrunErr').style.display = 'none';
+  const kod = el('adminUrunKod').value.trim();
+  const ad = el('adminUrunAd').value.trim();
+  if (!kod && !ad){ el('adminUrunErr').textContent = 'Ürün kodu veya adı gerekli'; el('adminUrunErr').style.display = 'block'; return; }
+  try{
+    const { error } = await sb.from('fis_urunler').insert({ kod: kod || null, ad: ad || null });
+    if (error) throw error;
+    el('adminUrunKod').value = '';
+    el('adminUrunAd').value = '';
+    toast('Ürün eklendi ✓');
+    urunListe.push({ kod, ad, fiyat: 0 });
+    loadAdminUrunList();
+  } catch(err){
+    el('adminUrunErr').textContent = 'Hata: ' + err.message; el('adminUrunErr').style.display = 'block';
+  }
+}
+
+async function loadAdminUrunList(){
+  const el = document.getElementById('adminUrunList');
+  const { data, error } = await sb.from('fis_urunler').select('id, kod, ad').order('ad');
+  if (error){ el.innerHTML = '<div class="empty">Hata: ' + error.message + '</div>'; return; }
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">Henüz ürün eklenmedi.</div>'; return; }
+  el.innerHTML = '';
+  for (const u of data){
+    const row = document.createElement('div');
+    row.className = 'admin-cat-row';
+    row.innerHTML = `<span>${u.kod ? `<span class="tip-badge">${escapeAttr(u.kod)}</span>` : ''}${escapeAttr(u.ad || '')}</span><button class="icon-btn" title="Sil">✕</button>`;
+    row.querySelector('button').onclick = () => adminDeleteUrun(u.id, u.kod, u.ad);
+    el.appendChild(row);
+  }
+}
+
+async function adminDeleteUrun(id, kod, ad){
+  const ok = confirm(`"${ad || kod}" ürününü silmek istediğine emin misin?`);
+  if (!ok) return;
+  try{
+    const { error } = await sb.from('fis_urunler').delete().eq('id', id);
+    if (error) throw error;
+    urunListe = urunListe.filter(u => !(u.kod === (kod||'') && u.ad === (ad||'')));
+    toast('Ürün silindi ✓');
+    loadAdminUrunList();
+  } catch(err){
+    toast('Silme hatası: ' + err.message, true);
+  }
+}
+
 function loadAdminPanel(){
   renderAdminCatList();
   loadAdminUsers();
+  loadAdminCariList();
+  loadAdminUrunList();
 }
 
 function updateCell(tip, key, idx, field, value){
