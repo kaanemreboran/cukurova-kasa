@@ -542,6 +542,7 @@
         <div class="autocomplete-list hidden" id="fisCariDropdown"></div>
         <div class="spacer"></div>
         <button class="btn ghost" onclick="clearFis()">Temizle</button>
+        <button class="btn ghost" onclick="downloadFisExcel()">📊 Excel İndir</button>
         <button class="btn" onclick="printFis()">🖨️ Fişi Kaydet ve Yazdır</button>
       </div>
 
@@ -630,6 +631,7 @@
       <div class="toolbar">
         <div class="spacer"></div>
         <button class="btn ghost" onclick="clearTeklif()">Temizle</button>
+        <button class="btn ghost" onclick="downloadTeklifExcel()">📊 Excel İndir</button>
         <button class="btn ghost" onclick="downloadTeklifPDF()">📄 PDF Olarak Kaydet</button>
         <button class="btn ghost" onclick="sendTeklifToFis()">📦 Siparişe Gönder</button>
         <button class="btn" id="teklifKaydetBtn" onclick="saveTeklif()">Teklifi Kaydet</button>
@@ -819,6 +821,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 /* ============================================================
    SUPABASE
@@ -2291,6 +2294,112 @@ function downloadTeklifPDF(){
   });
 }
 
+/* ============================================================
+   EXCEL (.xlsx) OLARAK İNDİR — Fiş ve Teklif
+   ============================================================ */
+function buildExcelAOA(headerPairs, tableHeaders, tableRows, totalsPairs){
+  const aoa = [];
+  for (const [label, value] of headerPairs){
+    if (value) aoa.push([label, value]);
+  }
+  aoa.push([]);
+  aoa.push(tableHeaders);
+  for (const row of tableRows) aoa.push(row);
+  aoa.push([]);
+  for (const [label, value] of totalsPairs) aoa.push([label, value]);
+  return aoa;
+}
+function downloadExcelAOA(aoa, filename){
+  if (typeof XLSX === 'undefined'){ toast('Excel kütüphanesi yüklenemedi — internet bağlantını kontrol et', true); return; }
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:16},{wch:22},{wch:22},{wch:22},{wch:22},{wch:22},{wch:22},{wch:22},{wch:22},{wch:14}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sayfa1');
+  XLSX.writeFile(wb, filename);
+}
+function safeFileName(s){
+  return (s || 'kayit').toString().trim().replace(/[^a-zA-Z0-9ığüşöçİĞÜŞÖÇ]+/g, '_').slice(0, 60) || 'kayit';
+}
+
+function exportFisExcel(rec){
+  const headerPairs = [
+    ['Fiş No', rec.fis_no || ''],
+    ['Cari Kod', rec.cari_kod || ''],
+    ['Cari', rec.cari || ''],
+    ['Tarih', new Date(rec.created_at || Date.now()).toLocaleString('tr-TR')],
+    ['Hazırlayan', rec.olusturan || currentUser || '']
+  ];
+  const tableHeaders = ['Ürün Kodu','Ürün Adı','Adet','Fiyat (KDV Dahil)','İsk1 %','İsk2 %','KDV %','Tutar'];
+  const tableRows = (rec.urunler || []).map(r => [r.kod||'', r.ad||'', r.adet, r.fiyat, r.isk1, r.isk2, r.kdv, Number(fisRowTutar(r).toFixed(2))]);
+  const totalsPairs = [
+    ['Ara Toplam (KDV Hariç)', Number((rec.ara_toplam||0).toFixed(2))],
+    ['KDV Toplam', Number((rec.kdv_toplam||0).toFixed(2))],
+    ['Genel Toplam (KDV Dahil)', Number((rec.genel_toplam||0).toFixed(2))]
+  ];
+  const aoa = buildExcelAOA(headerPairs, tableHeaders, tableRows, totalsPairs);
+  downloadExcelAOA(aoa, `Fis_${safeFileName(rec.fis_no || rec.cari)}.xlsx`);
+}
+
+function downloadFisExcel(){
+  if (!fisRows.length){ toast('Fişte ürün yok', true); return; }
+  const cariKod = document.getElementById('fisCariKod').value.trim();
+  const cari = document.getElementById('fisCari').value.trim();
+  const t = computeFisTotals();
+  exportFisExcel({
+    fis_no: '(kaydedilmedi)',
+    cari_kod: cariKod, cari,
+    urunler: fisRows,
+    ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
+    olusturan: currentUser,
+    created_at: new Date().toISOString()
+  });
+}
+
+function exportTeklifExcel(rec){
+  const aracBilgi = [rec.marka, rec.model, rec.model_yili].filter(Boolean).join(' ');
+  const headerPairs = [
+    ['Cari Kod', rec.cari_kod || ''],
+    ['Cari Adı', rec.cari_adi || ''],
+    ['Plaka', rec.plaka || ''],
+    ['Telefon', rec.telefon || ''],
+    ['Şase No', rec.sase_no || ''],
+    ['Araç', aracBilgi],
+    ['Tarih', new Date(rec.created_at || Date.now()).toLocaleString('tr-TR')],
+    ['Hazırlayan', rec.olusturan || currentUser || '']
+  ];
+  const tableHeaders = ['Ürün Kodu','OEM','Marka','Ürün Adı','Adet','Fiyat (KDV Dahil)','İsk1 %','İsk2 %','KDV %','Tutar'];
+  const tableRows = (rec.urunler || []).map(r => [r.kod||'', r.oem||'', r.marka||'', r.ad||'', r.adet, r.fiyat, r.isk1, r.isk2, r.kdv, Number(fisRowTutar(r).toFixed(2))]);
+  const totalsPairs = [
+    ['Ara Toplam (KDV Hariç)', Number((rec.ara_toplam||0).toFixed(2))],
+    ['KDV Toplam', Number((rec.kdv_toplam||0).toFixed(2))],
+    ['Genel Toplam (KDV Dahil)', Number((rec.genel_toplam||0).toFixed(2))]
+  ];
+  const aoa = buildExcelAOA(headerPairs, tableHeaders, tableRows, totalsPairs);
+  downloadExcelAOA(aoa, `Teklif_${safeFileName(rec.cari_adi || rec.cari_kod)}.xlsx`);
+}
+
+function downloadTeklifExcel(){
+  if (!teklifRows.length){ toast('Teklifte ürün yok', true); return; }
+  const get = (id) => document.getElementById(id).value.trim();
+  const t = computeRowsTotals(teklifRows);
+  exportTeklifExcel({
+    cari_kod: get('teklifCariKod'),
+    cari_adi: get('teklifCariAdi'),
+    plaka: get('teklifPlaka'),
+    telefon: get('teklifTelefon'),
+    sase_no: get('teklifSaseNo'),
+    marka: get('teklifMarka'),
+    model: get('teklifModel'),
+    model_yili: get('teklifModelYili'),
+    urunler: teklifRows,
+    ara_toplam: t.araToplam,
+    kdv_toplam: t.kdvToplam,
+    genel_toplam: t.genelToplam,
+    olusturan: currentUser,
+    created_at: new Date().toISOString()
+  });
+}
+
 async function printFis(){
   if (!fisRows.length){ toast('Fişte ürün yok', true); return; }
   const cariKod = document.getElementById('fisCariKod').value.trim();
@@ -2363,17 +2472,20 @@ async function loadFisHistory(){
         <div class="nums">
           <div><span>Genel Toplam</span>${fmt(rec.genel_toplam)}</div>
         </div>
+        <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📊 Excel</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">🖨️ Yazdır</button>
         <button class="btn danger" style="padding:6px 12px;font-size:12px;">✕ Sil</button>
       </div>
     `;
-    div.querySelectorAll('button')[0].onclick = () => {
+    const fisBtns = div.querySelectorAll('button');
+    fisBtns[0].onclick = () => exportFisExcel(rec);
+    fisBtns[1].onclick = () => {
       document.getElementById('printArea').className = 'print-a5';
       document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(rec);
       setPrintPageSize('A5', '8mm');
       window.print();
     };
-    div.querySelectorAll('button')[1].onclick = async () => {
+    fisBtns[2].onclick = async () => {
       const ok = confirm(`${escapeAttr(rec.fis_no)} numaralı fişi kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
       if (!ok) return;
       const { error: delErr } = await sb.from('fisler').delete().eq('id', rec.id);
@@ -2577,15 +2689,17 @@ async function loadTeklifHistory(){
         <div class="nums">
           <div><span>Teklif Tutarı</span>${fmt(rec.genel_toplam)}</div>
         </div>
+        <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📊 Excel</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📄 PDF</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📦 Siparişe Gönder</button>
         <button class="btn danger" style="padding:6px 12px;font-size:12px;">✕ Sil</button>
       </div>
     `;
     const btns = div.querySelectorAll('button');
-    btns[0].onclick = () => printTeklifPDF(rec);
-    btns[1].onclick = () => sendTeklifRecordToFis(rec);
-    btns[2].onclick = async () => {
+    btns[0].onclick = () => exportTeklifExcel(rec);
+    btns[1].onclick = () => printTeklifPDF(rec);
+    btns[2].onclick = () => sendTeklifRecordToFis(rec);
+    btns[3].onclick = async () => {
       const ok = confirm(`${escapeAttr(rec.cari_adi || rec.cari_kod || 'Bu')} teklifini kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
       if (!ok) return;
       const { error: delErr } = await sb.from('teklifler').delete().eq('id', rec.id);
