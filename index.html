@@ -218,14 +218,45 @@
     .side-nav{
       width:100%;flex-direction:row;overflow-x:auto;padding:8px 10px;
       border-right:none;border-bottom:1px solid var(--line);gap:6px;
+      -webkit-overflow-scrolling:touch;scrollbar-width:thin;
     }
     .side-nav .side-label{display:none;}
-    .side-nav button{flex-shrink:0;padding:8px 12px;}
+    .side-nav button{flex-shrink:0;padding:10px 14px;font-size:13.5px;}
     .userbox span, .userbox b{display:none;}
     .userbox button{white-space:nowrap;}
     header{padding:10px 12px;}
     main{padding:12px;}
     .toolbar{gap:8px;}
+    .summary{position:static;}
+    .grid{gap:12px;}
+  }
+
+  /* Yatay taşan tablolar (ürün satırları vb.) için kaydırma sarmalayıcısı —
+     dar ekranda sütunlar sıkışıp okunmaz hale gelmesin, yatay kaydırılsın. */
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .table-scroll table{min-width:640px;}
+
+  /* Modallar çok dar ekranlarda taşmasın */
+  .login-box{max-width:92vw;}
+
+  @media (max-width:560px){
+    /* Dokunma hedeflerini büyüt */
+    button.btn{padding:11px 16px;font-size:14px;}
+    input, select{padding:10px 11px;font-size:14.5px;}
+    .add-row-btn{padding:10px 12px;font-size:13.5px;}
+    .icon-btn{font-size:17px;padding:6px 8px;}
+
+    /* Toolbar'lardaki etiket+alan çiftleri yan yana sıkışmak yerine
+       her biri tam genişlikte alt alta aksın — dar ekranda çok daha kolay dokunulur. */
+    .toolbar{flex-direction:column;align-items:stretch;}
+    .toolbar .spacer{display:none;}
+    .toolbar label{margin:2px 0 -4px;}
+    .toolbar input, .toolbar select{width:100% !important;}
+    .toolbar > button.btn{width:100%;}
+
+    .field-grid{grid-template-columns:1fr 1fr;}
+    .history-item{padding:12px;}
+    .history-actions{width:100%;justify-content:space-between;}
   }
 
   .col-forms{display:flex;flex-direction:column;gap:16px;}
@@ -550,6 +581,7 @@
       <div class="card">
         <div class="card-head"><h3>Ürünler</h3><span class="toplam">Genel Toplam (KDV Dahil): <b id="fisGenelToplam">0,00</b></span></div>
         <div class="card-body">
+          <div class="table-scroll">
           <table>
             <thead><tr>
               <th style="width:14%">Ürün Kodu</th>
@@ -564,6 +596,7 @@
             </tr></thead>
             <tbody id="fisRowsBody"></tbody>
           </table>
+          </div>
           <button class="add-row-btn" onclick="addFisRow()">+ Ürün Ekle</button>
         </div>
       </div>
@@ -641,6 +674,7 @@
       <div class="card">
         <div class="card-head"><h3>Ürünler</h3><span class="toplam">Genel Toplam (KDV Dahil): <b id="teklifGenelToplam">0,00</b></span></div>
         <div class="card-body">
+          <div class="table-scroll">
           <table>
             <thead><tr>
               <th style="width:11%">Ürün Kodu</th>
@@ -657,6 +691,7 @@
             </tr></thead>
             <tbody id="teklifRowsBody"></tbody>
           </table>
+          </div>
           <button class="add-row-btn" onclick="addTeklifRow()">+ Ürün Ekle</button>
         </div>
       </div>
@@ -3122,11 +3157,11 @@ async function loadUstaIstatistik(){
     body.style.padding = '0 0 10px 26px';
 
     const urunler = Object.values(u.urunler).sort((a,b2) => b2.tutar - a.tutar);
-    let tbl = '<table><thead><tr><th>Ürün Kodu</th><th>Ürün Adı</th><th style="width:15%">Toplam Adet</th><th style="width:18%">Toplam Tutar</th></tr></thead><tbody>';
+    let tbl = '<div class="table-scroll"><table><thead><tr><th>Ürün Kodu</th><th>Ürün Adı</th><th style="width:15%">Toplam Adet</th><th style="width:18%">Toplam Tutar</th></tr></thead><tbody>';
     for (const p of urunler){
       tbl += `<tr class="row-line"><td>${escapeAttr(p.kod)}</td><td>${escapeAttr(p.ad)}</td><td>${p.adet}</td><td>${fmt(p.tutar)}</td></tr>`;
     }
-    tbl += '</tbody></table>';
+    tbl += '</tbody></table></div>';
     body.innerHTML = tbl;
 
     head.onclick = () => {
