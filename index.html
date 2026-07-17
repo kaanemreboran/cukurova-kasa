@@ -392,6 +392,12 @@
     #printArea .fis-copy{page-break-after:always;}
     #printArea .fis-copy:last-child{page-break-after:auto;}
     #printArea .fis-copy-label{font-size:10.5px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#666;margin-bottom:2px;}
+    /* A5 yatay (Fiş / Teklif PDF) için daha sıkı ölçekleme — A4 (Föy) buna dahil değil */
+    #printArea.print-a5{padding:10px;}
+    #printArea.print-a5 table{font-size:9.5px;margin-bottom:8px;}
+    #printArea.print-a5 th, #printArea.print-a5 td{padding:3px 5px;}
+    #printArea.print-a5 .p-summary{font-size:10px;gap:3px 14px;margin-top:6px;}
+    #printArea.print-a5 .p-summary div{padding:1px 0;}
   }
 </style>
 </head>
@@ -2162,20 +2168,20 @@ function buildFisPrintHTML(rec, copyLabel){
   const tarihStr = dt.toLocaleDateString('tr-TR');
   const saatStr = dt.toLocaleTimeString('tr-TR');
   let html = `
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:10px;">
-      <img src="cukurova-logo.png" style="width:52px;height:52px;object-fit:contain;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+      <img src="cukurova-logo.png" style="width:36px;height:36px;object-fit:contain;">
       <div>
-        <div style="font-size:17px;font-weight:800;letter-spacing:.5px;">ÇUKUROVA<br><span style="font-weight:600;font-size:13px;">OTOMOTİV</span></div>
+        <div style="font-size:14px;font-weight:800;letter-spacing:.5px;">ÇUKUROVA<br><span style="font-weight:600;font-size:10.5px;">OTOMOTİV</span></div>
       </div>
       <div style="flex:1;"></div>
-      <div style="text-align:right;font-size:11.5px;color:#333;">
+      <div style="text-align:right;font-size:10px;color:#333;">
         ${copyLabel ? `<div class="fis-copy-label">${escapeAttr(copyLabel)}</div>` : ''}
         <div>${escapeAttr(rec.fis_no)}</div>
         <div>${saatStr}</div>
         <div>${tarihStr}</div>
       </div>
     </div>
-    <div style="font-size:13px;font-weight:700;margin-bottom:14px;">${rec.cari_kod ? `<span style="color:#666;font-weight:600;">[${escapeAttr(rec.cari_kod)}]</span> ` : ''}${escapeAttr(rec.cari || '—')}</div>
+    <div style="font-size:11.5px;font-weight:700;margin-bottom:8px;">${rec.cari_kod ? `<span style="color:#666;font-weight:600;">[${escapeAttr(rec.cari_kod)}]</span> ` : ''}${escapeAttr(rec.cari || '—')}</div>
     <table><thead><tr>
       <th>ÜRÜN KODU</th><th>ÜRÜN ADI</th><th>AD</th><th>FİYAT (KDV DAHİL)</th><th>İSK1</th><th>İSK2</th><th>KDV</th><th>TUTAR</th>
     </tr></thead><tbody>
@@ -2188,7 +2194,7 @@ function buildFisPrintHTML(rec, copyLabel){
     </tr>`;
   }
   html += `</tbody></table>`;
-  html += `<div class="p-summary" style="grid-template-columns:1fr;max-width:280px;margin-left:auto;">
+  html += `<div class="p-summary" style="grid-template-columns:1fr;max-width:240px;margin-left:auto;">
     <div><span>ARA TOPLAM (KDV HARİÇ)</span><b>${fmt(rec.ara_toplam)}</b></div>
     <div><span>KDV</span><b>${fmt(rec.kdv_toplam)}</b></div>
     <div><span>GENEL TOPLAM (KDV DAHİL)</span><b>${fmt(rec.genel_toplam)}</b></div>
@@ -2216,18 +2222,18 @@ function buildTeklifPrintHTML(rec){
   const saatStr = dt.toLocaleTimeString('tr-TR');
   const aracBilgi = [rec.marka, rec.model, rec.model_yili].filter(Boolean).join(' ');
   let html = `
-    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;">
-      <img src="cukurova-logo.png" style="width:56px;height:56px;object-fit:contain;">
-      <div style="font-size:19px;font-weight:800;letter-spacing:.5px;">ÇUKUROVA<br><span style="font-weight:600;font-size:14px;">OTOMOTİV</span></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <img src="cukurova-logo.png" style="width:36px;height:36px;object-fit:contain;">
+      <div style="font-size:14px;font-weight:800;letter-spacing:.5px;">ÇUKUROVA<br><span style="font-weight:600;font-size:10.5px;">OTOMOTİV</span></div>
       <div style="flex:1;"></div>
-      <div style="text-align:right;font-size:12px;color:#333;">
-        <div style="font-weight:700;font-size:13.5px;">FİYAT TEKLİFİ</div>
+      <div style="text-align:right;font-size:10px;color:#333;">
+        <div style="font-weight:700;font-size:11.5px;">FİYAT TEKLİFİ</div>
         <div>${saatStr}</div>
         <div>${tarihStr}</div>
         ${rec.olusturan ? `<div>Hazırlayan: ${escapeAttr(rec.olusturan)}</div>` : ''}
       </div>
     </div>
-    <div class="p-summary" style="margin-bottom:16px;">
+    <div class="p-summary" style="grid-template-columns:repeat(3,1fr);margin-bottom:8px;">
       ${rec.cari_kod ? `<div><span>CARİ KOD</span><b>${escapeAttr(rec.cari_kod)}</b></div>` : ''}
       ${rec.cari_adi ? `<div><span>CARİ ADI</span><b>${escapeAttr(rec.cari_adi)}</b></div>` : ''}
       ${rec.plaka ? `<div><span>PLAKA</span><b>${escapeAttr(rec.plaka)}</b></div>` : ''}
@@ -2247,7 +2253,7 @@ function buildTeklifPrintHTML(rec){
     </tr>`;
   }
   html += `</tbody></table>`;
-  html += `<div class="p-summary" style="grid-template-columns:1fr;max-width:280px;margin-left:auto;margin-top:14px;">
+  html += `<div class="p-summary" style="grid-template-columns:1fr;max-width:240px;margin-left:auto;margin-top:8px;">
     <div><span>ARA TOPLAM (KDV HARİÇ)</span><b>${fmt(rec.ara_toplam)}</b></div>
     <div><span>KDV</span><b>${fmt(rec.kdv_toplam)}</b></div>
     <div><span>GENEL TOPLAM (KDV DAHİL)</span><b>${fmt(rec.genel_toplam)}</b></div>
@@ -2256,8 +2262,9 @@ function buildTeklifPrintHTML(rec){
 }
 
 function printTeklifPDF(rec){
+  document.getElementById('printArea').className = 'print-a5';
   document.getElementById('printArea').innerHTML = buildTeklifPrintHTML(rec);
-  setPrintPageSize('A4', '15mm');
+  setPrintPageSize('A5 landscape', '8mm');
   window.print();
 }
 
@@ -2316,8 +2323,9 @@ async function printFis(){
     toast('Fiş kaydedilemedi (yazdırma devam ediyor): ' + err.message, true);
   }
 
+  document.getElementById('printArea').className = 'print-a5';
   document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(record);
-  setPrintPageSize('A4', '15mm');
+  setPrintPageSize('A5 landscape', '8mm');
   window.print();
 }
 
@@ -2360,8 +2368,9 @@ async function loadFisHistory(){
       </div>
     `;
     div.querySelectorAll('button')[0].onclick = () => {
+      document.getElementById('printArea').className = 'print-a5';
       document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(rec);
-      setPrintPageSize('A4', '15mm');
+      setPrintPageSize('A5 landscape', '8mm');
       window.print();
     };
     div.querySelectorAll('button')[1].onclick = async () => {
@@ -2885,6 +2894,7 @@ function printFoy(){
     <div><span>Bankalar Güncel Durum</span><b>${fmt(r.bankalarGuncelDurum)}</b></div>
   </div>`;
 
+  document.getElementById('printArea').className = '';
   document.getElementById('printArea').innerHTML = html;
   setPrintPageSize('A4', '15mm');
   window.print();
