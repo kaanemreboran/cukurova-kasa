@@ -130,6 +130,15 @@
   }
   input:focus,select:focus{outline:none;border-color:var(--indigo-light);}
 
+  /* Sayı alanlarındaki artı/eksi (spinner) oklarını kaldır — gerekli değil */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button{
+    -webkit-appearance:none;margin:0;
+  }
+  input[type="number"]{
+    -moz-appearance:textfield;
+  }
+
   /* Tarih inputundaki takvim ikonu: koyu temada açık (görünür), açık temada koyu */
   input[type="date"]::-webkit-calendar-picker-indicator{
     filter:invert(1);
@@ -2871,6 +2880,14 @@ setTimeout(checkConnection, 5000);
 /* ============================================================
    ENTER TUŞU DAVRANIŞLARI
    ============================================================ */
+// Sayı alanlarına tıklayınca/odaklanınca içindeki değer (örn. "0") otomatik seçili gelsin —
+// böylece yazmaya başlayınca üstüne yazılır, "0" ile birleşip "05" gibi görünmez.
+document.addEventListener('focus', (e) => {
+  if (e.target.tagName === 'INPUT' && e.target.type === 'number'){
+    e.target.select();
+  }
+}, true);
+
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter') return;
   const el = e.target;
