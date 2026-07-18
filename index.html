@@ -404,6 +404,14 @@
   .sum-collapsible-body{padding:10px 14px;display:flex;flex-direction:column;gap:6px;}
   .sum-collapsible-body.hidden{display:none;}
 
+  .color-palette{display:flex;gap:6px;align-items:center;}
+  .color-swatch{
+    width:26px;height:26px;border-radius:50%;border:2px solid transparent;
+    cursor:pointer;padding:0;flex-shrink:0;transition:transform .1s,border-color .1s;
+  }
+  .color-swatch:hover{transform:scale(1.12);}
+  .color-swatch.active{border-color:var(--ink);box-shadow:0 0 0 2px var(--card);}
+
   /* ---------- history tab ---------- */
   .history-list{display:flex;flex-direction:column;gap:6px;}
   .history-item{
@@ -853,7 +861,8 @@
         <label>Komisyon %</label>
         <input type="number" step="0.01" id="adminKomisyon" placeholder="Örn: 1.57" style="width:100px;">
         <label>Renk</label>
-        <input type="color" id="adminRenk" value="#94a3b8" style="width:44px;padding:3px;height:38px;">
+        <div class="color-palette" id="adminRenkPalette"></div>
+        <input type="hidden" id="adminRenk" value="#94a3b8">
         <button class="btn ghost hidden" id="adminCatCancelBtn" onclick="cancelEditCategory()">Vazgeç</button>
         <button class="btn" id="adminCatSaveBtn" onclick="addCategory()">Kategori Ekle</button>
       </div>
@@ -1557,6 +1566,32 @@ function slugify(str){
 
 let editingCat = null; // { catId, tip, anahtar } veya null (yeni ekleme modu)
 
+const CATEGORY_COLOR_PALETTE = [
+  { name:'Gri',      hex:'#94a3b8' },
+  { name:'Yeşil',    hex:'#22c55e' },
+  { name:'Mavi',     hex:'#3b82f6' },
+  { name:'Turuncu',  hex:'#f59e0b' },
+  { name:'Kırmızı',  hex:'#ef4444' },
+  { name:'Mor',      hex:'#a855f7' },
+  { name:'Lacivert', hex:'#6366f1' },
+  { name:'Pembe',    hex:'#ec4899' }
+];
+
+function renderCategoryColorPalette(selected){
+  const el = document.getElementById('adminRenkPalette');
+  if (!el) return;
+  const sel = selected || '#94a3b8';
+  el.innerHTML = CATEGORY_COLOR_PALETTE.map(c => `
+    <button type="button" class="color-swatch${sel === c.hex ? ' active' : ''}" data-hex="${c.hex}" style="background:${c.hex};" title="${c.name}" onclick="selectCategoryColor('${c.hex}')"></button>
+  `).join('');
+}
+function selectCategoryColor(hex){
+  document.getElementById('adminRenk').value = hex;
+  document.querySelectorAll('#adminRenkPalette .color-swatch').forEach(b => {
+    b.classList.toggle('active', b.dataset.hex === hex);
+  });
+}
+
 function updateCatSaveBtnLabel(){
   const btn = document.getElementById('adminCatSaveBtn');
   if (btn) btn.textContent = editingCat ? 'Kategoriyi Güncelle' : 'Kategori Ekle';
@@ -1571,6 +1606,7 @@ function editCategory(cat){
   document.getElementById('adminEtiket').value = cat.label;
   document.getElementById('adminKomisyon').value = cat.komisyonOran || '';
   document.getElementById('adminRenk').value = cat.customColor || '#94a3b8';
+  renderCategoryColorPalette(cat.customColor || '#94a3b8');
   updateCatSaveBtnLabel();
   toast('Kategori düzenleme için forma yüklendi ✓');
 }
@@ -1581,6 +1617,7 @@ function cancelEditCategory(){
   document.getElementById('adminEtiket').value = '';
   document.getElementById('adminKomisyon').value = '';
   document.getElementById('adminRenk').value = '#94a3b8';
+  renderCategoryColorPalette('#94a3b8');
   updateCatSaveBtnLabel();
 }
 
@@ -1610,6 +1647,7 @@ async function addCategory(){
       etiketInput.value = '';
       document.getElementById('adminKomisyon').value = '';
       document.getElementById('adminRenk').value = '#94a3b8';
+      renderCategoryColorPalette('#94a3b8');
       toast('Kategori eklendi ✓');
     }
     renderAdminCatList();
@@ -1825,6 +1863,7 @@ async function adminDeleteUrun(id, kod, ad){
 function loadAdminPanel(){
   renderAdminCatList();
   loadAdminUsers();
+  if (!editingCat) renderCategoryColorPalette(document.getElementById('adminRenk')?.value);
 }
 
 function updateCell(tip, key, idx, field, value){
