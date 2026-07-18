@@ -258,6 +258,12 @@
        sola yapışıp eğri görünüyordu — dar ekranda gizle, aralarındaki boşluk yeterli. */
     .toolbar .toolbar-sep{display:none;}
 
+    /* Tarih ileri/geri grubu tek bir bileşen gibi davransın — dar ekranda da
+       ◀ [tarih] ▶ aynı satırda kalsın, alt alta bölünmesin. */
+    .toolbar .date-nav-group{width:100%;}
+    .toolbar .date-nav-group input{width:auto !important;flex:1;min-width:0;}
+    .toolbar .date-nav-btn{width:auto !important;}
+
     /* Rozet/etiket gibi küçük öğeler (durum pili vb.) dikey toolbar'da
        tam genişliğe gerilip devasa/eğri görünmesin — kendi doğal boyutunda kalsın. */
     .toolbar .status-pill{align-self:flex-start;}
@@ -489,6 +495,9 @@
   }
   .shortcut-tip{font-size:11.5px;color:var(--ink-dim);font-style:italic;}
 
+  .date-nav-group{display:flex;align-items:center;gap:6px;}
+  .date-nav-btn{padding:8px 11px;flex-shrink:0;}
+
   #printArea{display:none;}
   @media print{
     body *{visibility:hidden;}
@@ -567,7 +576,7 @@
 <div class="app-body">
   <aside class="side-nav">
     <div class="side-label">Föy</div>
-    <button id="sideBtnFoy" class="active" onclick="switchSide('foy')"><span class="side-ico">📋</span> Bugünkü Föy</button>
+    <button id="sideBtnFoy" class="active" onclick="switchSide('foy')"><span class="side-ico">📋</span> Föy</button>
     <div class="side-label" style="margin-top:6px;">Diğer</div>
     <button id="sideBtnFis" onclick="switchSide('fis')"><span class="side-ico">🧾</span> Fiş</button>
     <button id="sideBtnTeklif" onclick="switchSide('teklif')"><span class="side-ico">📝</span> Teklif</button>
@@ -578,7 +587,7 @@
 
   <div class="content-col">
     <nav class="tabs" id="foySubTabs">
-      <button id="tabBtnFoy" class="active" onclick="switchTab('foy')">Bugünkü Föy</button>
+      <button id="tabBtnFoy" class="active" onclick="switchTab('foy')">Föy</button>
       <button id="tabBtnGecmis" onclick="switchTab('gecmis')">Geçmiş Föyler</button>
       <button id="tabBtnHareketler" onclick="switchTab('hareketler')">Hareketler</button>
     </nav>
@@ -589,7 +598,12 @@
   <section id="tabFoy">
     <div class="toolbar">
       <label>Tarih</label>
-      <input type="date" id="tarihInput" onchange="onDateChange()">
+      <div class="date-nav-group">
+        <button class="btn ghost date-nav-btn" onclick="shiftDate(-1)" title="Önceki gün">◀</button>
+        <input type="date" id="tarihInput" onchange="onDateChange()">
+        <button class="btn ghost date-nav-btn" onclick="shiftDate(1)" title="Sonraki gün">▶</button>
+      </div>
+      <button class="btn ghost" onclick="goToToday()">Bugün</button>
       <span class="status-pill yeni" id="statusPill">Yeni</span>
       <div class="spacer"></div>
       <button class="btn ghost" onclick="loadFoyForDate(true)">Yeniden Yükle</button>
@@ -974,7 +988,7 @@
     <div class="shortcut-row"><kbd>Tab</kbd><span>Son satırın son alanında: yeni satır ekle ve oraya geç</span></div>
     <div class="shortcut-row"><span class="shortcut-tip">Bir sayı alanına tıklayınca içindeki değer otomatik seçilir — direkt üstüne yazabilirsin.</span></div>
 
-    <div class="shortcut-group">Bugünkü Föy</div>
+    <div class="shortcut-group">Föy</div>
     <div class="shortcut-row"><kbd>Enter</kbd><span>Föyü kaydet</span></div>
 
     <div class="shortcut-group">Formlar (Giriş, Admin — Kategori/Kullanıcı Ekle)</div>
@@ -1316,6 +1330,21 @@ async function init(){
 }
 
 function onDateChange(){ loadFoyForDate(); }
+
+// Tarihi bir gün ileri (delta=1) veya geri (delta=-1) kaydırır.
+function shiftDate(delta){
+  const input = document.getElementById('tarihInput');
+  if (!input.value) return;
+  const [y, m, d] = input.value.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + delta);
+  input.value = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+  onDateChange();
+}
+function goToToday(){
+  document.getElementById('tarihInput').value = todayStr();
+  onDateChange();
+}
 
 /* ============================================================
    LOAD FÖY
