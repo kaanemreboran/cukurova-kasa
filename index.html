@@ -850,9 +850,14 @@
         </select>
         <label>Kategori Adı</label>
         <input type="text" id="adminEtiket" placeholder="Örn: Sipay ile Satış" style="flex:1;min-width:180px;">
-        <button class="btn" onclick="addCategory()">Kategori Ekle</button>
+        <label>Komisyon %</label>
+        <input type="number" step="0.01" id="adminKomisyon" placeholder="Örn: 1.57" style="width:100px;">
+        <label>Renk</label>
+        <input type="color" id="adminRenk" value="#94a3b8" style="width:44px;padding:3px;height:38px;">
+        <button class="btn ghost hidden" id="adminCatCancelBtn" onclick="cancelEditCategory()">Vazgeç</button>
+        <button class="btn" id="adminCatSaveBtn" onclick="addCategory()">Kategori Ekle</button>
       </div>
-      <p style="font-size:11.5px;color:var(--ink-dim);margin:10px 2px 0;">Not: Yeni kategoriler için otomatik komisyon hesabı (Vakıfbank/YKB gibi) desteklenmez, tutar elle girilir.</p>
+      <p style="font-size:11.5px;color:var(--ink-dim);margin:10px 2px 0;">Komisyon oranı girilirse (örn. Vakıfbank/YKB gibi) tutar otomatik hesaplanıp "Hesaba Geçen" sütunu eklenir. Boş bırakılırsa tutar elle girilir.</p>
     </div>
     <div class="admin-card">
       <h3>Mevcut Özel Kategoriler</h3>
@@ -1430,7 +1435,7 @@ function renderMethodRow(tip, method){
     : '';
   head.innerHTML = `
     <span class="chevron">▶</span>
-    ${colorDot(method.key)}
+    ${colorDot(method.key, method.customColor)}
     <span class="method-name">${escapeAttr(method.label)}${commissionHtml}</span>
     <span class="method-total${total ? ' has-value' : ''}" id="method-total-${tip}-${method.key}">${fmt(total)}</span>
   `;
@@ -1524,9 +1529,24 @@ async function loadCustomCategories(){
   for (const cat of (data||[])){
     if (!SECTIONS[cat.islem_tipi]) continue;
     if (SECTIONS[cat.islem_tipi].methods.some(m => m.key === cat.anahtar)) continue; // zaten eklenmiş
-    SECTIONS[cat.islem_tipi].methods.push({ key: cat.anahtar, label: cat.etiket, hesabaGecen: false, custom: true, catId: cat.id });
+    const oran = (cat.komisyon_oran === null || cat.komisyon_oran === undefined) ? null : Number(cat.komisyon_oran);
+    SECTIONS[cat.islem_tipi].methods.push(buildCustomMethodObject(cat.anahtar, cat.etiket, oran, cat.renk, cat.id));
   }
   customCategoriesLoaded = true;
+}
+
+function buildCustomMethodObject(anahtar, etiket, oran, renk, catId){
+  const method = {
+    key: anahtar, label: etiket,
+    hesabaGecen: !!(oran && oran > 0),
+    custom: true, catId,
+    komisyonOran: oran || null, customColor: renk || null
+  };
+  if (oran && oran > 0){
+    method.commission = (tutar) => tutar - tutar * (oran/100);
+    method.commissionLabel = `%${oran} komisyon`;
+  }
+  return method;
 }
 
 function slugify(str){
@@ -1535,24 +1555,67 @@ function slugify(str){
     .toLowerCase().trim().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
 }
 
+let editingCat = null; // { catId, tip, anahtar } veya null (yeni ekleme modu)
+
+function updateCatSaveBtnLabel(){
+  const btn = document.getElementById('adminCatSaveBtn');
+  if (btn) btn.textContent = editingCat ? 'Kategoriyi Güncelle' : 'Kategori Ekle';
+  const cancelBtn = document.getElementById('adminCatCancelBtn');
+  if (cancelBtn) cancelBtn.classList.toggle('hidden', !editingCat);
+}
+
+function editCategory(cat){
+  editingCat = { catId: cat.catId, tip: cat.tip, anahtar: cat.key };
+  document.getElementById('adminTip').value = cat.tip;
+  document.getElementById('adminTip').disabled = true;
+  document.getElementById('adminEtiket').value = cat.label;
+  document.getElementById('adminKomisyon').value = cat.komisyonOran || '';
+  document.getElementById('adminRenk').value = cat.customColor || '#94a3b8';
+  updateCatSaveBtnLabel();
+  toast('Kategori düzenleme için forma yüklendi ✓');
+}
+
+function cancelEditCategory(){
+  editingCat = null;
+  document.getElementById('adminTip').disabled = false;
+  document.getElementById('adminEtiket').value = '';
+  document.getElementById('adminKomisyon').value = '';
+  document.getElementById('adminRenk').value = '#94a3b8';
+  updateCatSaveBtnLabel();
+}
+
 async function addCategory(){
   const tip = document.getElementById('adminTip').value;
   const etiketInput = document.getElementById('adminEtiket');
   const etiket = etiketInput.value.trim();
   if (!etiket){ toast('Kategori adı gerekli', true); return; }
-  const anahtar = slugify(etiket) + '_' + Math.random().toString(36).slice(2,6);
+  const oranRaw = document.getElementById('adminKomisyon').value.trim();
+  const oran = oranRaw === '' ? null : Number(oranRaw);
+  const renk = document.getElementById('adminRenk').value || null;
 
   try{
-    const { data, error } = await sb.from('kategoriler').insert({ islem_tipi: tip, anahtar, etiket }).select().single();
-    if (error) throw error;
-    SECTIONS[tip].methods.push({ key: data.anahtar, label: data.etiket, hesabaGecen: false, custom: true, catId: data.id });
-    if (state) state[tip][data.anahtar] = [];
-    etiketInput.value = '';
-    toast('Kategori eklendi ✓');
+    if (editingCat){
+      const { error } = await sb.from('kategoriler').update({ etiket, komisyon_oran: oran, renk }).eq('id', editingCat.catId);
+      if (error) throw error;
+      const idx = SECTIONS[editingCat.tip].methods.findIndex(m => m.key === editingCat.anahtar);
+      if (idx >= 0) SECTIONS[editingCat.tip].methods[idx] = buildCustomMethodObject(editingCat.anahtar, etiket, oran, renk, editingCat.catId);
+      toast('Kategori güncellendi ✓');
+      cancelEditCategory();
+    } else {
+      const anahtar = slugify(etiket) + '_' + Math.random().toString(36).slice(2,6);
+      const { data, error } = await sb.from('kategoriler').insert({ islem_tipi: tip, anahtar, etiket, komisyon_oran: oran, renk }).select().single();
+      if (error) throw error;
+      SECTIONS[tip].methods.push(buildCustomMethodObject(data.anahtar, data.etiket, oran, renk, data.id));
+      if (state) state[tip][data.anahtar] = [];
+      etiketInput.value = '';
+      document.getElementById('adminKomisyon').value = '';
+      document.getElementById('adminRenk').value = '#94a3b8';
+      toast('Kategori eklendi ✓');
+    }
     renderAdminCatList();
     if (document.getElementById('tabFoy') && !document.getElementById('tabFoy').classList.contains('hidden')) renderFoy();
   } catch(err){
-    toast('Kategori eklenemedi: ' + err.message, true);
+    toast('Kategori kaydedilemedi: ' + err.message, true);
   }
 }
 
@@ -1563,6 +1626,7 @@ async function deleteCategory(tip, key, catId){
     const { error } = await sb.from('kategoriler').delete().eq('id', catId);
     if (error) throw error;
     SECTIONS[tip].methods = SECTIONS[tip].methods.filter(m => m.key !== key);
+    if (editingCat && editingCat.catId === catId) cancelEditCategory();
     toast('Kategori silindi ✓');
     renderAdminCatList();
     if (document.getElementById('tabFoy') && !document.getElementById('tabFoy').classList.contains('hidden')) renderFoy();
@@ -1585,11 +1649,18 @@ function renderAdminCatList(){
   for (const c of all){
     const row = document.createElement('div');
     row.className = 'admin-cat-row';
+    const dotHtml = `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.customColor || '#94a3b8'};margin-right:8px;flex-shrink:0;"></span>`;
+    const komisyonHtml = c.komisyonOran ? `<span style="color:var(--ink-dim);font-size:11px;margin-left:6px;">(%${c.komisyonOran} komisyon)</span>` : '';
     row.innerHTML = `
-      <span><span class="tip-badge">${tipLabels[c.tip]}</span>${escapeAttr(c.label)}</span>
-      <button class="icon-btn" title="Sil">✕</button>
+      <span style="display:flex;align-items:center;">${dotHtml}<span class="tip-badge">${tipLabels[c.tip]}</span>${escapeAttr(c.label)}${komisyonHtml}</span>
+      <span style="display:flex;gap:4px;">
+        <button class="icon-btn" title="Düzenle">✏️</button>
+        <button class="icon-btn" title="Sil">✕</button>
+      </span>
     `;
-    row.querySelector('button').onclick = () => deleteCategory(c.tip, c.key, c.catId);
+    const btns = row.querySelectorAll('button');
+    btns[0].onclick = () => editCategory(c);
+    btns[1].onclick = () => deleteCategory(c.tip, c.key, c.catId);
     el.appendChild(row);
   }
 }
@@ -1792,8 +1863,8 @@ function methodColor(key){
   if (key === 'mailorder') return '#a855f7';                               // mor — mail order
   return '#94a3b8';                                                        // gri — özel/diğer
 }
-function colorDot(key){
-  return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${methodColor(key)};margin-right:7px;flex-shrink:0;"></span>`;
+function colorDot(key, overrideColor){
+  return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${overrideColor || methodColor(key)};margin-right:7px;flex-shrink:0;"></span>`;
 }
 
 function escapeAttr(v){
