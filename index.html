@@ -473,6 +473,22 @@
   .login-box input{width:100%;margin-bottom:10px;}
   .login-box button{width:100%;}
 
+  /* ---------- klavye kısayolları modalı ---------- */
+  .shortcut-group{
+    font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+    color:var(--indigo-light);margin:14px 0 6px;
+  }
+  .shortcut-group:first-of-type{margin-top:0;}
+  .shortcut-row{
+    display:flex;align-items:center;gap:10px;padding:5px 0;font-size:13px;color:var(--ink);
+  }
+  .shortcut-row kbd{
+    display:inline-block;min-width:20px;text-align:center;background:var(--navy-800);
+    border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;
+    padding:3px 7px;font-family:inherit;font-size:12px;font-weight:700;color:var(--ink);
+  }
+  .shortcut-tip{font-size:11.5px;color:var(--ink-dim);font-style:italic;}
+
   #printArea{display:none;}
   @media print{
     body *{visibility:hidden;}
@@ -542,6 +558,7 @@
     </div>
   </div>
   <div class="userbox">
+    <button class="theme-toggle" id="shortcutsBtn" onclick="openShortcutsModal()" title="Klavye Kısayolları">⌨️</button>
     <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()">☀️ <span id="themeToggleLabel">Açık Mod</span></button>
     <button onclick="openAccountModal()" style="background:none;border:1px solid var(--line);color:var(--ink);border-radius:6px;padding:5px 10px;font-size:12.5px;cursor:pointer;">👤 <b id="currentUserLabel">—</b></button>
   </div>
@@ -947,6 +964,29 @@
   </div>
 </div>
 
+<div id="shortcutsOverlay" class="login-overlay hidden" onclick="if(event.target===this) closeShortcutsModal();">
+  <div class="login-box" style="width:400px;">
+    <h2>⌨️ Klavye Kısayolları</h2>
+    <p style="margin:0 0 14px;">Hızlı veri girişi için kullanabileceğin kısayollar.</p>
+
+    <div class="shortcut-group">Fiş / Teklif — Ürün Satırları</div>
+    <div class="shortcut-row"><kbd>Enter</kbd><span>Yeni satır ekle</span></div>
+    <div class="shortcut-row"><kbd>Tab</kbd><span>Son satırın son alanında: yeni satır ekle ve oraya geç</span></div>
+    <div class="shortcut-row"><span class="shortcut-tip">Bir sayı alanına tıklayınca içindeki değer otomatik seçilir — direkt üstüne yazabilirsin.</span></div>
+
+    <div class="shortcut-group">Bugünkü Föy</div>
+    <div class="shortcut-row"><kbd>Enter</kbd><span>Föyü kaydet</span></div>
+
+    <div class="shortcut-group">Formlar (Giriş, Admin — Kategori/Kullanıcı Ekle)</div>
+    <div class="shortcut-row"><kbd>Enter</kbd><span>Formu gönder</span></div>
+
+    <div class="shortcut-group">Genel</div>
+    <div class="shortcut-row"><kbd>?</kbd><span>Bu pencereyi aç/kapat</span></div>
+
+    <button class="btn ghost" style="margin-top:16px;width:100%;" onclick="closeShortcutsModal()">Kapat</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <div id="printArea"></div>
@@ -1127,6 +1167,13 @@ function openAccountModal(){
 }
 function closeAccountModal(){
   document.getElementById('accountOverlay').classList.add('hidden');
+}
+
+function openShortcutsModal(){
+  document.getElementById('shortcutsOverlay').classList.remove('hidden');
+}
+function closeShortcutsModal(){
+  document.getElementById('shortcutsOverlay').classList.add('hidden');
 }
 
 function openPasswordModal(){
@@ -3781,6 +3828,19 @@ document.addEventListener('focus', (e) => {
 
 document.addEventListener('keydown', (e) => {
   const el = e.target;
+
+  // "?" tuşu: bir yazı alanına odaklanmış değilken kısayollar penceresini aç/kapat
+  if (e.key === '?' && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA' && el.tagName !== 'SELECT'){
+    e.preventDefault();
+    const overlay = document.getElementById('shortcutsOverlay');
+    if (overlay) overlay.classList.contains('hidden') ? openShortcutsModal() : closeShortcutsModal();
+    return;
+  }
+  // Kısayollar penceresi açıkken Escape ile kapat
+  if (e.key === 'Escape'){
+    const overlay = document.getElementById('shortcutsOverlay');
+    if (overlay && !overlay.classList.contains('hidden')){ closeShortcutsModal(); return; }
+  }
 
   // TAB: Fiş/Teklif ürün tablolarında son satırın son alanında Tab'a basınca
   // otomatik yeni satır açılıp oraya geçilsin (tablo/Excel benzeri hızlı giriş).
