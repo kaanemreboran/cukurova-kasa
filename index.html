@@ -1673,6 +1673,11 @@ async function deleteCategory(tip, key, catId){
   }
 }
 
+function paletteColorIndex(hex){
+  const idx = CATEGORY_COLOR_PALETTE.findIndex(c => c.hex === (hex || '#94a3b8'));
+  return idx === -1 ? CATEGORY_COLOR_PALETTE.length : idx;
+}
+
 function renderAdminCatList(){
   const el = document.getElementById('adminCatList');
   const tipLabels = { satis:'Satış', tahsilat:'Tahsilat', odeme:'Ödeme', masraf:'Masraf' };
@@ -1683,6 +1688,12 @@ function renderAdminCatList(){
     }
   }
   if (!all.length){ el.innerHTML = '<div class="empty">Henüz özel kategori eklenmedi.</div>'; return; }
+  // Renklere göre gruplu sırala (palet sırası), aynı renkte olanlar isme göre
+  all.sort((a, b) => {
+    const ci = paletteColorIndex(a.customColor) - paletteColorIndex(b.customColor);
+    if (ci !== 0) return ci;
+    return (a.label || '').localeCompare(b.label || '', 'tr');
+  });
   el.innerHTML = '';
   for (const c of all){
     const row = document.createElement('div');
