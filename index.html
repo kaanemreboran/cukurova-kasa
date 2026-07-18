@@ -633,14 +633,14 @@
       <div class="toolbar" style="position:relative;">
         <label>Cari Kod</label>
         <input type="text" id="fisCariKod" autocomplete="off" placeholder="Cari kodu" style="width:140px;"
-          oninput="showFisCariKodDropdown(this.value)"
-          onfocus="showFisCariKodDropdown(this.value)"
+          oninput="showCariKodDropdown('fisCariKod','fisCariKodDropdown','fisCari',this.value)"
+          onfocus="showCariKodDropdown('fisCariKod','fisCariKodDropdown','fisCari',this.value)"
           onblur="hideDropdownDelayed('fisCariKodDropdown')">
         <div class="autocomplete-list hidden" id="fisCariKodDropdown"></div>
         <label>Cari / Usta</label>
         <input type="text" id="fisCari" autocomplete="off" placeholder="Örn: ÇOPUR OTO / HÜSEYİN ÇOPUR" style="flex:1;min-width:220px;"
-          oninput="showCariDropdown(this.value)"
-          onfocus="showCariDropdown(this.value)"
+          oninput="showCariDropdown(this.value, 'fisCari', 'fisCariDropdown', 'fisCariKod')"
+          onfocus="showCariDropdown(this.value, 'fisCari', 'fisCariDropdown', 'fisCariKod')"
           onblur="hideDropdownDelayed('fisCariDropdown')">
         <div class="autocomplete-list hidden" id="fisCariDropdown"></div>
         <div class="spacer"></div>
@@ -714,12 +714,19 @@
         <div class="card-head"><h3>Müşteri / Araç Bilgileri</h3></div>
         <div class="card-body" style="padding:14px;">
           <div class="field-grid">
-            <div class="field-item"><label>Cari Kod</label><input type="text" id="teklifCariKod"></div>
+            <div class="field-item" style="position:relative;">
+              <label>Cari Kod</label>
+              <input type="text" id="teklifCariKod" autocomplete="off"
+                oninput="showCariKodDropdown('teklifCariKod','teklifCariKodDropdown','teklifCariAdi',this.value)"
+                onfocus="showCariKodDropdown('teklifCariKod','teklifCariKodDropdown','teklifCariAdi',this.value)"
+                onblur="hideDropdownDelayed('teklifCariKodDropdown')">
+              <div class="autocomplete-list hidden" id="teklifCariKodDropdown"></div>
+            </div>
             <div class="field-item" style="position:relative;">
               <label>Cari Adı</label>
               <input type="text" id="teklifCariAdi" autocomplete="off"
-                oninput="showCariDropdown(this.value, 'teklifCariAdi', 'teklifCariAdiDropdown')"
-                onfocus="showCariDropdown(this.value, 'teklifCariAdi', 'teklifCariAdiDropdown')"
+                oninput="showCariDropdown(this.value, 'teklifCariAdi', 'teklifCariAdiDropdown', 'teklifCariKod')"
+                onfocus="showCariDropdown(this.value, 'teklifCariAdi', 'teklifCariAdiDropdown', 'teklifCariKod')"
                 onblur="hideDropdownDelayed('teklifCariAdiDropdown')">
               <div class="autocomplete-list hidden" id="teklifCariAdiDropdown"></div>
             </div>
@@ -2309,21 +2316,40 @@ function renderFisRows(){
    ============================================================ */
 let cariListe = [];      // cari adları (Cari/Usta alanı için)
 let cariKodListe = [];   // cari kodları (Cari Kod alanı için)
+let cariRecords = [];    // [{kod, ad}] — kod<->ad eşleşmesi için
 let cariListeLoaded = false;
 
 async function loadCariListe(){
   const { data, error } = await sb.from('fis_cariler').select('kod, ad').order('ad');
   if (error) return;
-  cariListe = (data || []).map(r => r.ad).filter(Boolean);
-  cariKodListe = [...new Set((data || []).map(r => r.kod).filter(Boolean))];
+  cariRecords = data || [];
+  cariListe = cariRecords.map(r => r.ad).filter(Boolean);
+  cariKodListe = [...new Set(cariRecords.map(r => r.kod).filter(Boolean))];
   cariListeLoaded = true;
 }
 
-function showCariDropdown(query, inputId, dropdownId){
-  showAutocompleteDropdown(inputId || 'fisCari', dropdownId || 'fisCariDropdown', cariListe, query, () => {}, 3);
+// Cari Adı alanı: bir isim seçilince eşleşen kod varsa karşılığındaki
+// "Cari Kod" alanını otomatik doldurur.
+function showCariDropdown(query, inputId, dropdownId, pairKodInputId){
+  showAutocompleteDropdown(inputId || 'fisCari', dropdownId || 'fisCariDropdown', cariListe, query, (value) => {
+    if (!pairKodInputId) return;
+    const rec = cariRecords.find(r => r.ad === value && r.kod);
+    if (rec){
+      const pairEl = document.getElementById(pairKodInputId);
+      if (pairEl) pairEl.value = rec.kod;
+    }
+  }, 3);
 }
-function showFisCariKodDropdown(query){
-  showAutocompleteDropdown('fisCariKod', 'fisCariKodDropdown', cariKodListe, query, () => {}, 3);
+// Cari Kod alanı: bir kod seçilince eşleşen ad varsa karşılığındaki
+// "Cari Adı" alanını otomatik doldurur.
+function showCariKodDropdown(inputId, dropdownId, pairAdInputId, query){
+  showAutocompleteDropdown(inputId, dropdownId, cariKodListe, query, (value) => {
+    const rec = cariRecords.find(r => r.kod === value && r.ad);
+    if (rec && pairAdInputId){
+      const pairEl = document.getElementById(pairAdInputId);
+      if (pairEl) pairEl.value = rec.ad;
+    }
+  }, 3);
 }
 
 // Fiş kaydedilince, o fişte kullanılan cari kodu/adı daha önce yoksa listeye ekler.
