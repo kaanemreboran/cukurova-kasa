@@ -383,6 +383,27 @@
   .fark-ok b{color:var(--green) !important;}
   .fark-bad b{color:var(--red) !important;}
 
+  /* ---------- sağ panel: katlanır özet kartları (Nakit/Kredi/Mail Order/Banka) ---------- */
+  .sum-collapsible .sum-head-click{
+    display:flex;align-items:center;gap:8px;padding:10px 14px;cursor:pointer;user-select:none;
+    background:var(--navy-800);border-bottom:1px solid var(--line);
+  }
+  .sum-collapsible .sum-head-click:hover{background:var(--navy-700);}
+  .sum-collapsible .chevron{
+    display:inline-block;color:var(--ink-dim);font-size:10px;width:10px;flex-shrink:0;
+    transition:transform .15s ease;
+  }
+  .sum-collapsible.open .chevron{transform:rotate(90deg);}
+  .sum-collapsible .sum-head-title{
+    flex:1;min-width:0;font-size:11.5px;font-weight:800;text-transform:uppercase;
+    letter-spacing:.6px;color:var(--indigo-light);
+  }
+  .sum-collapsible .sum-head-value{font-size:14px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink);}
+  .sum-collapsible .sum-head-value.fark-ok{color:var(--green) !important;}
+  .sum-collapsible .sum-head-value.fark-bad{color:var(--red) !important;}
+  .sum-collapsible-body{padding:10px 14px;display:flex;flex-direction:column;gap:6px;}
+  .sum-collapsible-body.hidden{display:none;}
+
   /* ---------- history tab ---------- */
   .history-list{display:flex;flex-direction:column;gap:6px;}
   .history-item{
@@ -1871,13 +1892,34 @@ function computeSummary(customState){
   };
 }
 
+let summaryOpenOverride = JSON.parse(localStorage.getItem('kasa_summary_open') || '{}');
+function isSummaryOpen(key){
+  return !!summaryOpenOverride[key];
+}
+function toggleSummarySection(key){
+  summaryOpenOverride[key] = !isSummaryOpen(key);
+  localStorage.setItem('kasa_summary_open', JSON.stringify(summaryOpenOverride));
+  renderSummary();
+}
+
 function renderSummary(){
   const c = document.getElementById('summaryContainer');
   const r = computeSummary();
+
+  const nakitOpen = isSummaryOpen('nakit');
+  const krediOpen = isSummaryOpen('kredi');
+  const moOpen = isSummaryOpen('mailorder');
+  const bankaOpen = isSummaryOpen('banka');
+  const farkClass = r.fark === null ? '' : (Math.abs(r.fark) < 0.01 ? 'fark-ok' : 'fark-bad');
+
   c.innerHTML = `
-    <div class="sum-card">
-      <div class="sum-head">Nakit Kasa</div>
-      <div class="sum-body">
+    <div class="sum-card sum-collapsible ${nakitOpen ? 'open' : ''}">
+      <div class="sum-head-click" onclick="toggleSummarySection('nakit')">
+        <span class="chevron">▶</span>
+        <span class="sum-head-title">Nakit Kasa</span>
+        <span class="sum-head-value ${farkClass}" id="s-head-nakit">${fmt(r.nakitDurum)}</span>
+      </div>
+      <div class="sum-collapsible-body ${nakitOpen ? '' : 'hidden'}">
         <div class="sum-row"><span>Dünden Devir</span><input type="number" step="0.01" value="${state.nakit_devir}" oninput="state.nakit_devir=Number(this.value)||0; renderSummarySoft();"></div>
         <div class="sum-row"><span>Nakit Giriş</span><b id="s-nakitGiris">${fmt(r.nakitGiris)}</b></div>
         <div class="sum-row"><span>Nakit Çıkış</span><b id="s-nakitCikis">${fmt(r.nakitCikis)}</b></div>
@@ -1887,18 +1929,26 @@ function renderSummary(){
       </div>
     </div>
 
-    <div class="sum-card">
-      <div class="sum-head">Kredi Kasa</div>
-      <div class="sum-body">
+    <div class="sum-card sum-collapsible ${krediOpen ? 'open' : ''}">
+      <div class="sum-head-click" onclick="toggleSummarySection('kredi')">
+        <span class="chevron">▶</span>
+        <span class="sum-head-title">Kredi Kasa</span>
+        <span class="sum-head-value" id="s-head-kredi">${fmt(r.toplamKrediliSatis)}</span>
+      </div>
+      <div class="sum-collapsible-body ${krediOpen ? '' : 'hidden'}">
         <div class="sum-row"><span>Vakıfbank Toplam (satış+tahsilat, net)</span><b id="s-vakifToplam">${fmt(r.vakifbankToplamSatis)}</b></div>
         <div class="sum-row"><span>YKB Toplam (satış+tahsilat, net)</span><b id="s-ykbToplam">${fmt(r.ykbToplamSatis)}</b></div>
         <div class="sum-row total"><span>Toplam Kredili Satış</span><b id="s-toplamKredi">${fmt(r.toplamKrediliSatis)}</b></div>
       </div>
     </div>
 
-    <div class="sum-card">
-      <div class="sum-head">Mail Order Kasa</div>
-      <div class="sum-body">
+    <div class="sum-card sum-collapsible ${moOpen ? 'open' : ''}">
+      <div class="sum-head-click" onclick="toggleSummarySection('mailorder')">
+        <span class="chevron">▶</span>
+        <span class="sum-head-title">Mail Order Kasa</span>
+        <span class="sum-head-value" id="s-head-mo">${fmt(r.mailorderNetKasaEtkisi)}</span>
+      </div>
+      <div class="sum-collapsible-body ${moOpen ? '' : 'hidden'}">
         <div class="sum-row"><span>Satış Tutarı</span><b id="s-moSatis">${fmt(r.mailorderSatisTutar)}</b></div>
         <div class="sum-row"><span>Tahsilat Tutarı</span><b id="s-moTahsilat">${fmt(r.mailorderTahsilatTutar)}</b></div>
         <div class="sum-row total"><span>Satış+Tahsilat Toplam</span><b id="s-moToplam">${fmt(r.mailorderSatisToplam)}</b></div>
@@ -1909,9 +1959,13 @@ function renderSummary(){
       </div>
     </div>
 
-    <div class="sum-card">
-      <div class="sum-head">Banka Hareketleri</div>
-      <div class="sum-body">
+    <div class="sum-card sum-collapsible ${bankaOpen ? 'open' : ''}">
+      <div class="sum-head-click" onclick="toggleSummarySection('banka')">
+        <span class="chevron">▶</span>
+        <span class="sum-head-title">Banka Hareketleri</span>
+        <span class="sum-head-value" id="s-head-banka">${fmt(r.bankalarGuncelDurum)}</span>
+      </div>
+      <div class="sum-collapsible-body ${bankaOpen ? '' : 'hidden'}">
         <div class="sum-row"><span>Vakıfbank Devir</span><input type="number" step="0.01" value="${state.vakif_devir}" oninput="state.vakif_devir=Number(this.value)||0; renderSummarySoft();"></div>
         <div class="sum-row"><span>Yapı Kredi Devir</span><input type="number" step="0.01" value="${state.ykb_devir}" oninput="state.ykb_devir=Number(this.value)||0; renderSummarySoft();"></div>
         <div class="sum-row total"><span>Banka Devir Toplam</span><b id="s-bankaDevir">${fmt(r.bankaDevir)}</b></div>
@@ -1968,6 +2022,17 @@ function renderSummarySoft(){
   set('s-ykbHareket', fmt(r.ykbGunHareket));
   set('s-ykbDurum', fmt(r.ykbGuncelDurum));
   set('s-bankalarDurum', fmt(r.bankalarGuncelDurum));
+
+  // katlanır kart başlıklarındaki özet rakamlar (kapalıyken de görünen kısım)
+  set('s-head-nakit', fmt(r.nakitDurum));
+  set('s-head-kredi', fmt(r.toplamKrediliSatis));
+  set('s-head-mo', fmt(r.mailorderNetKasaEtkisi));
+  set('s-head-banka', fmt(r.bankalarGuncelDurum));
+  const headNakit = document.getElementById('s-head-nakit');
+  if (headNakit){
+    headNakit.classList.remove('fark-ok','fark-bad');
+    if (r.fark !== null) headNakit.classList.add(Math.abs(r.fark) < 0.01 ? 'fark-ok' : 'fark-bad');
+  }
 }
 
 /* ============================================================
