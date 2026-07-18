@@ -1412,12 +1412,19 @@ function renderEntryTabs(){
   `).join('');
 }
 
+function methodEffectiveColor(method){
+  return method.customColor || methodColor(method.key);
+}
+
 function renderEntryPanel(){
   const el = document.getElementById('entryPanel');
   if (!el) return;
   const wrap = document.createElement('div');
   wrap.className = 'method-list';
-  for (const m of SECTIONS[activeEntryTip].methods){
+  const methods = [...SECTIONS[activeEntryTip].methods].sort((a, b) =>
+    paletteColorIndex(methodEffectiveColor(a)) - paletteColorIndex(methodEffectiveColor(b))
+  );
+  for (const m of methods){
     wrap.appendChild(renderMethodRow(activeEntryTip, m));
   }
   el.innerHTML = '';
