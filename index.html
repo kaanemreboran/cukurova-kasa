@@ -677,6 +677,7 @@
         <div class="spacer"></div>
         <button class="btn ghost" onclick="clearFis()">Temizle</button>
         <button class="btn ghost" onclick="downloadFisExcel()">📊 Excel İndir</button>
+        <button class="btn ghost" onclick="sendCurrentFisWhatsApp()">💬 WhatsApp</button>
         <button class="btn" onclick="printFis()">🖨️ Fişi Kaydet ve Yazdır</button>
       </div>
 
@@ -776,6 +777,7 @@
         <button class="btn ghost" onclick="clearTeklif()">Temizle</button>
         <button class="btn ghost" onclick="downloadTeklifExcel()">📊 Excel İndir</button>
         <button class="btn ghost" onclick="downloadTeklifPDF()">📄 PDF Olarak Kaydet</button>
+        <button class="btn ghost" onclick="sendCurrentTeklifWhatsApp()">💬 WhatsApp</button>
         <button class="btn ghost" onclick="sendTeklifToFis()">📦 Siparişe Gönder</button>
         <button class="btn" id="teklifKaydetBtn" onclick="saveTeklif()">Teklifi Kaydet</button>
       </div>
@@ -2652,6 +2654,66 @@ function printTeklifPDF(rec){
 }
 
 // Ekrandaki (henüz kaydedilmemiş olabilecek) teklifi PDF olarak indirir.
+/* ============================================================
+   WHATSAPP'TAN GÖNDER — mesaj hazır halde WhatsApp'ı açar.
+   Not: WhatsApp, siteye kullanıcı onayı olmadan otomatik mesaj gönderme izni
+   vermiyor (spam önleme) — bu yüzden son "Gönder" tuşuna WhatsApp içinde
+   kendin basman gerekiyor, mesaj/alıcı hazır halde geliyor.
+   ============================================================ */
+function normalizeTrPhone(raw){
+  let phone = (raw || '').replace(/[^0-9]/g, '');
+  if (!phone) return '';
+  if (phone.startsWith('0')) phone = phone.slice(1);
+  if (!phone.startsWith('90')) phone = '90' + phone;
+  return phone;
+}
+
+function openWhatsApp(phoneRaw, mesaj){
+  const phone = normalizeTrPhone(phoneRaw);
+  const url = (phone ? `https://wa.me/${phone}` : 'https://wa.me/') + `?text=${encodeURIComponent(mesaj)}`;
+  window.open(url, '_blank');
+}
+
+function buildFisWhatsAppMessage(rec){
+  const cariText = (rec.cari_kod ? `[${rec.cari_kod}] ` : '') + (rec.cari || 'Cari yok');
+  const satirlar = (rec.urunler || []).map(r => `• ${r.ad || r.kod || 'Ürün'} x${r.adet} — ${fmt(fisRowTutar(r))} TL`).join('\n');
+  return `*ÇUKUROVA OTOMOTİV*\n${rec.fis_no ? `Fiş No: ${rec.fis_no}\n` : ''}Cari: ${cariText}\n\n${satirlar}\n\n*Genel Toplam: ${fmt(rec.genel_toplam)} TL*`;
+}
+function sendFisWhatsApp(rec){
+  openWhatsApp('', buildFisWhatsAppMessage(rec));
+}
+function sendCurrentFisWhatsApp(){
+  if (!fisRows.length){ toast('Fişte ürün yok', true); return; }
+  const cariKod = document.getElementById('fisCariKod').value.trim();
+  const cari = document.getElementById('fisCari').value.trim();
+  const t = computeFisTotals();
+  sendFisWhatsApp({ fis_no:'', cari, cari_kod: cariKod, urunler: fisRows, genel_toplam: t.genelToplam });
+}
+
+function buildTeklifWhatsAppMessage(rec){
+  const aracBilgi = [rec.marka, rec.model, rec.model_yili].filter(Boolean).join(' ');
+  const satirlar = (rec.urunler || []).map(r => `• ${r.ad || r.kod || 'Ürün'} x${r.adet} — ${fmt(fisRowTutar(r))} TL`).join('\n');
+  let msg = `*ÇUKUROVA OTOMOTİV — FİYAT TEKLİFİ*\n`;
+  if (rec.cari_adi) msg += `Sayın ${rec.cari_adi},\n`;
+  if (rec.plaka) msg += `Plaka: ${rec.plaka}\n`;
+  if (aracBilgi) msg += `Araç: ${aracBilgi}\n`;
+  msg += `\n${satirlar}\n\n*Genel Toplam: ${fmt(rec.genel_toplam)} TL*`;
+  return msg;
+}
+function sendTeklifWhatsApp(rec){
+  openWhatsApp(rec.telefon || '', buildTeklifWhatsAppMessage(rec));
+}
+function sendCurrentTeklifWhatsApp(){
+  if (!teklifRows.length){ toast('Teklifte ürün yok', true); return; }
+  const get = (id) => document.getElementById(id).value.trim();
+  const t = computeRowsTotals(teklifRows);
+  sendTeklifWhatsApp({
+    cari_adi: get('teklifCariAdi'), plaka: get('teklifPlaka'), telefon: get('teklifTelefon'),
+    marka: get('teklifMarka'), model: get('teklifModel'), model_yili: get('teklifModelYili'),
+    urunler: teklifRows, genel_toplam: t.genelToplam
+  });
+}
+
 function downloadTeklifPDF(){
   if (!teklifRows.length){ toast('Teklifte ürün yok', true); return; }
   const get = (id) => document.getElementById(id).value.trim();
@@ -3021,19 +3083,21 @@ async function loadFisHistory(){
           <div><span>Genel Toplam</span>${fmt(rec.genel_toplam)}</div>
         </div>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📊 Excel</button>
+        <button class="btn ghost" style="padding:6px 12px;font-size:12px;">💬 WhatsApp</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">🖨️ Yazdır</button>
         <button class="btn danger" style="padding:6px 12px;font-size:12px;">✕ Sil</button>
       </div>
     `;
     const fisBtns = div.querySelectorAll('button');
     fisBtns[0].onclick = () => exportFisExcel(rec);
-    fisBtns[1].onclick = () => {
+    fisBtns[1].onclick = () => sendFisWhatsApp(rec);
+    fisBtns[2].onclick = () => {
       document.getElementById('printArea').className = 'print-a5';
       document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(rec);
       setPrintPageSize('A5', '8mm');
       window.print();
     };
-    fisBtns[2].onclick = async () => {
+    fisBtns[3].onclick = async () => {
       const ok = confirm(`${escapeAttr(rec.fis_no)} numaralı fişi kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
       if (!ok) return;
       const { error: delErr } = await sb.from('fisler').delete().eq('id', rec.id);
@@ -3283,6 +3347,7 @@ async function loadTeklifHistory(){
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">✏️ Düzenle</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📊 Excel</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📄 PDF</button>
+        <button class="btn ghost" style="padding:6px 12px;font-size:12px;">💬 WhatsApp</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📦 Siparişe Gönder</button>
         <button class="btn danger" style="padding:6px 12px;font-size:12px;">✕ Sil</button>
       </div>
@@ -3291,8 +3356,9 @@ async function loadTeklifHistory(){
     btns[0].onclick = () => editTeklifRecord(rec);
     btns[1].onclick = () => exportTeklifExcel(rec);
     btns[2].onclick = () => printTeklifPDF(rec);
-    btns[3].onclick = () => sendTeklifRecordToFis(rec);
-    btns[4].onclick = async () => {
+    btns[3].onclick = () => sendTeklifWhatsApp(rec);
+    btns[4].onclick = () => sendTeklifRecordToFis(rec);
+    btns[5].onclick = async () => {
       const ok = confirm(`${escapeAttr(rec.cari_adi || rec.cari_kod || 'Bu')} teklifini kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
       if (!ok) return;
       const { error: delErr } = await sb.from('teklifler').delete().eq('id', rec.id);
