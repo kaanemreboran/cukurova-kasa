@@ -1013,6 +1013,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script>
 /* ============================================================
    SUPABASE
@@ -2682,44 +2683,44 @@ function buildFisWhatsAppMessage(rec){
   return `*ÇUKUROVA OTOMOTİV*\n${rec.fis_no ? `Fiş No: ${rec.fis_no}\n` : ''}Cari: ${cariText}\n\n${satirlar}\n\n*Genel Toplam: ${fmt(rec.genel_toplam)} TL*`;
 }
 
-// Fişi gerçek bir PDF dosyası (Blob) olarak üretir — tek nüsha, dijital paylaşım için
-// (kağıda basılan Müşteri/İşletme nüshası ayrımı burada gerekmiyor).
-function buildFisPDFBlob(rec){
+// Fişi gerçek bir PDF dosyası (Blob) olarak üretir — tek nüsha, dijital paylaşım için.
+// Not: jsPDF'in yerleşik fontları Türkçe karakterleri (ş,ğ,ı,İ,ç) desteklemiyor ve
+// bozuk çıkıyordu. Bunun yerine ekranda/yazdırmada zaten doğru görünen aynı HTML
+// şablonunu (buildFisPrintHTML) görünmez şekilde render edip "fotoğrafını" (html2canvas)
+// PDF'e gömüyoruz — böylece font/encoding sorunu tamamen ortadan kalkıyor.
+async function buildFisPDFBlob(rec){
+  const html = buildFisPrintHTML(rec); // kopya etiketi yok (dijital paylaşım, tek nüsha)
+  const widthPx = 560;
+
+  const container = document.createElement('div');
+  container.style.cssText = `position:fixed;left:-9999px;top:0;width:${widthPx}px;background:#fff;color:#000;padding:20px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;`;
+  container.innerHTML = `<style>
+    #pdfShotArea table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:12px;}
+    #pdfShotArea th, #pdfShotArea td{border:1px solid #999;padding:5px 7px;text-align:left;}
+    #pdfShotArea th{background:#eee;}
+    #pdfShotArea .p-summary{display:grid;grid-template-columns:1fr;gap:4px;font-size:13px;margin-top:10px;max-width:280px;margin-left:auto;}
+    #pdfShotArea .p-summary div{display:flex;justify-content:space-between;border-bottom:1px dotted #ccc;padding:2px 0;}
+    #pdfShotArea .p-summary b{font-weight:700;}
+  </style><div id="pdfShotArea">${html}</div>`;
+  document.body.appendChild(container);
+
+  await new Promise(r => setTimeout(r, 60)); // yerleşim otursun
+  const canvas = await html2canvas(container, { scale:2, backgroundColor:'#ffffff', useCORS:true });
+  document.body.removeChild(container);
+
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a5' });
-  const dt = new Date(rec.created_at || Date.now());
-
-  doc.setFontSize(15);
-  doc.setFont(undefined, 'bold');
-  doc.text('ÇUKUROVA OTOMOTİV', 10, 12);
-
-  doc.setFontSize(9);
-  doc.setFont(undefined, 'normal');
-  doc.text(`${rec.fis_no ? 'Fiş No: ' + rec.fis_no : ''}`, 10, 19);
-  const cariText = (rec.cari_kod ? `[${rec.cari_kod}] ` : '') + (rec.cari || '—');
-  doc.text(`Cari: ${cariText}`, 10, 25);
-  doc.text(dt.toLocaleString('tr-TR'), 10, 31);
-
-  doc.autoTable({
-    startY: 36,
-    head: [['Ürün Kodu','Ürün Adı','Adet','Fiyat','İsk1','İsk2','KDV','Tutar']],
-    body: (rec.urunler || []).map(r => [r.kod||'', r.ad||'', r.adet, fmt(r.fiyat), r.isk1+'%', r.isk2+'%', r.kdv+'%', fmt(fisRowTutar(r))]),
-    styles: { fontSize:7, cellPadding:1.5 },
-    headStyles: { fillColor:[99,102,241], fontSize:7 },
-    margin: { left:10, right:10 }
-  });
-
-  const y = doc.lastAutoTable.finalY + 9;
-  doc.setFontSize(11);
-  doc.setFont(undefined, 'bold');
-  doc.text(`Genel Toplam (KDV Dahil): ${fmt(rec.genel_toplam)} TL`, 10, y);
-
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const imgWidth = pageWidth - 16;
+  const imgHeight = canvas.height * imgWidth / canvas.width;
+  doc.addImage(canvas.toDataURL('image/png'), 'PNG', 8, 8, imgWidth, imgHeight);
   return doc.output('blob');
 }
 
 async function sendFisWhatsApp(rec){
-  if (typeof window.jspdf === 'undefined'){ toast('PDF kütüphanesi yüklenemedi — internet bağlantını kontrol et', true); return; }
-  const blob = buildFisPDFBlob(rec);
+  if (typeof window.jspdf === 'undefined' || typeof html2canvas === 'undefined'){ toast('PDF kütüphanesi yüklenemedi — internet bağlantını kontrol et', true); return; }
+  toast('PDF hazırlanıyor…');
+  const blob = await buildFisPDFBlob(rec);
   const filename = `Fis_${safeFileName(rec.fis_no || rec.cari)}.pdf`;
   const file = new File([blob], filename, { type:'application/pdf' });
 
