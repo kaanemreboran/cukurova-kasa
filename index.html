@@ -1011,6 +1011,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
 /* ============================================================
    SUPABASE
@@ -2679,15 +2681,75 @@ function buildFisWhatsAppMessage(rec){
   const satirlar = (rec.urunler || []).map(r => `• ${r.ad || r.kod || 'Ürün'} x${r.adet} — ${fmt(fisRowTutar(r))} TL`).join('\n');
   return `*ÇUKUROVA OTOMOTİV*\n${rec.fis_no ? `Fiş No: ${rec.fis_no}\n` : ''}Cari: ${cariText}\n\n${satirlar}\n\n*Genel Toplam: ${fmt(rec.genel_toplam)} TL*`;
 }
-function sendFisWhatsApp(rec){
+
+// Fişi gerçek bir PDF dosyası (Blob) olarak üretir — tek nüsha, dijital paylaşım için
+// (kağıda basılan Müşteri/İşletme nüshası ayrımı burada gerekmiyor).
+function buildFisPDFBlob(rec){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a5' });
+  const dt = new Date(rec.created_at || Date.now());
+
+  doc.setFontSize(15);
+  doc.setFont(undefined, 'bold');
+  doc.text('ÇUKUROVA OTOMOTİV', 10, 12);
+
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'normal');
+  doc.text(`${rec.fis_no ? 'Fiş No: ' + rec.fis_no : ''}`, 10, 19);
+  const cariText = (rec.cari_kod ? `[${rec.cari_kod}] ` : '') + (rec.cari || '—');
+  doc.text(`Cari: ${cariText}`, 10, 25);
+  doc.text(dt.toLocaleString('tr-TR'), 10, 31);
+
+  doc.autoTable({
+    startY: 36,
+    head: [['Ürün Kodu','Ürün Adı','Adet','Fiyat','İsk1','İsk2','KDV','Tutar']],
+    body: (rec.urunler || []).map(r => [r.kod||'', r.ad||'', r.adet, fmt(r.fiyat), r.isk1+'%', r.isk2+'%', r.kdv+'%', fmt(fisRowTutar(r))]),
+    styles: { fontSize:7, cellPadding:1.5 },
+    headStyles: { fillColor:[99,102,241], fontSize:7 },
+    margin: { left:10, right:10 }
+  });
+
+  const y = doc.lastAutoTable.finalY + 9;
+  doc.setFontSize(11);
+  doc.setFont(undefined, 'bold');
+  doc.text(`Genel Toplam (KDV Dahil): ${fmt(rec.genel_toplam)} TL`, 10, y);
+
+  return doc.output('blob');
+}
+
+async function sendFisWhatsApp(rec){
+  if (typeof window.jspdf === 'undefined'){ toast('PDF kütüphanesi yüklenemedi — internet bağlantını kontrol et', true); return; }
+  const blob = buildFisPDFBlob(rec);
+  const filename = `Fis_${safeFileName(rec.fis_no || rec.cari)}.pdf`;
+  const file = new File([blob], filename, { type:'application/pdf' });
+
+  // Mobilde: paylaşım menüsü açılır, WhatsApp seçilince PDF otomatik ekli gelir.
+  if (navigator.canShare && navigator.canShare({ files:[file] })){
+    try{
+      await navigator.share({ files:[file], title:'Fiş', text: buildFisWhatsAppMessage(rec) });
+      return;
+    } catch(err){
+      if (err.name === 'AbortError') return; // kullanıcı paylaşımı iptal etti
+    }
+  }
+
+  // Masaüstü/desteklenmeyen taraycılarda: PDF'i indir + WhatsApp'ı metinle aç,
+  // indirilen dosyayı sohbete elle sürükleyip eklemesi gerekiyor.
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  toast('PDF indirildi — WhatsApp açılıyor, indirilen dosyayı sohbete elle ekleyebilirsin');
   openWhatsApp('', buildFisWhatsAppMessage(rec));
 }
+
 function sendCurrentFisWhatsApp(){
   if (!fisRows.length){ toast('Fişte ürün yok', true); return; }
   const cariKod = document.getElementById('fisCariKod').value.trim();
   const cari = document.getElementById('fisCari').value.trim();
   const t = computeFisTotals();
-  sendFisWhatsApp({ fis_no:'', cari, cari_kod: cariKod, urunler: fisRows, genel_toplam: t.genelToplam });
+  sendFisWhatsApp({ fis_no:'', cari, cari_kod: cariKod, urunler: fisRows, genel_toplam: t.genelToplam, created_at: new Date().toISOString() });
 }
 
 function buildTeklifWhatsAppMessage(rec){
