@@ -115,6 +115,23 @@
   .side-nav button .side-ico{font-size:15px;width:18px;text-align:center;}
   .content-col{flex:1;min-width:0;}
 
+  /* ---------- Mobil alt sekme çubuğu (native app gibi) ---------- */
+  .bottom-nav{
+    display:none;
+    position:fixed;left:0;right:0;bottom:0;z-index:500;
+    background:var(--navy-900);border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom,0);
+  }
+  .bottom-nav-inner{display:flex;}
+  .bottom-nav button{
+    flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:2px;background:none;border:none;color:var(--ink-dim);
+    padding:8px 2px 7px;font-size:10px;font-weight:700;cursor:pointer;
+    min-height:56px;
+  }
+  .bottom-nav button .bn-ico{font-size:20px;line-height:1;}
+  .bottom-nav button.active{color:var(--indigo-light);}
+
   main{padding:18px 20px 60px;max-width:1400px;margin:0 auto;}
   .hidden{display:none !important;}
 
@@ -216,17 +233,13 @@
 
   @media (max-width:760px){
     .app-body{flex-direction:column;}
-    .side-nav{
-      width:100%;flex-direction:row;overflow-x:auto;padding:8px 10px;
-      border-right:none;border-bottom:1px solid var(--line);gap:6px;
-      -webkit-overflow-scrolling:touch;scrollbar-width:thin;
-    }
-    .side-nav .side-label{display:none;}
-    .side-nav button{flex-shrink:0;padding:10px 14px;font-size:13.5px;}
+    .side-nav{display:none;}
+    .bottom-nav{display:block;}
+    .bottom-nav-inner{max-width:640px;margin:0 auto;}
     .userbox span, .userbox b{display:none;}
     .userbox button{white-space:nowrap;}
     header{padding:10px 12px;}
-    main{padding:12px;}
+    main{padding:12px 12px 84px;}
     .toolbar{gap:8px;}
     .summary{position:static;}
     .grid{gap:12px;}
@@ -243,7 +256,7 @@
   @media (max-width:560px){
     /* Dokunma hedeflerini büyüt */
     button.btn{padding:11px 16px;font-size:14px;}
-    input, select{padding:10px 11px;font-size:14.5px;}
+    input, select{padding:10px 11px;font-size:16px;}
     .add-row-btn{padding:10px 12px;font-size:13.5px;}
     .icon-btn{font-size:17px;padding:6px 8px;}
 
@@ -584,6 +597,17 @@
     <button id="sideBtnIstatistik" onclick="switchSide('istatistik')"><span class="side-ico">📊</span> İstatistik</button>
     <button id="sideBtnAdmin" onclick="switchSide('admin')"><span class="side-ico">⚙️</span> Admin</button>
   </aside>
+
+  <nav class="bottom-nav">
+    <div class="bottom-nav-inner">
+      <button id="bottomBtnFoy" class="active" onclick="switchSide('foy')"><span class="bn-ico">📋</span>Föy</button>
+      <button id="bottomBtnFis" onclick="switchSide('fis')"><span class="bn-ico">🧾</span>Fiş</button>
+      <button id="bottomBtnTeklif" onclick="switchSide('teklif')"><span class="bn-ico">📝</span>Teklif</button>
+      <button id="bottomBtnKayitlar" onclick="switchSide('kayitlar')"><span class="bn-ico">📇</span>Cari</button>
+      <button id="bottomBtnIstatistik" onclick="switchSide('istatistik')"><span class="bn-ico">📊</span>İstat.</button>
+      <button id="bottomBtnAdmin" onclick="switchSide('admin')"><span class="bn-ico">⚙️</span>Admin</button>
+    </div>
+  </nav>
 
   <div class="content-col">
     <nav class="tabs" id="foySubTabs">
@@ -1270,6 +1294,13 @@ function switchSide(side){
   document.getElementById('sideBtnKayitlar').classList.toggle('active', side === 'kayitlar');
   document.getElementById('sideBtnIstatistik').classList.toggle('active', side === 'istatistik');
   document.getElementById('sideBtnAdmin').classList.toggle('active', side === 'admin');
+
+  document.getElementById('bottomBtnFoy').classList.toggle('active', side === 'foy');
+  document.getElementById('bottomBtnFis').classList.toggle('active', side === 'fis');
+  document.getElementById('bottomBtnTeklif').classList.toggle('active', side === 'teklif');
+  document.getElementById('bottomBtnKayitlar').classList.toggle('active', side === 'kayitlar');
+  document.getElementById('bottomBtnIstatistik').classList.toggle('active', side === 'istatistik');
+  document.getElementById('bottomBtnAdmin').classList.toggle('active', side === 'admin');
 
   document.getElementById('foySubTabs').classList.toggle('hidden', side !== 'foy');
   document.getElementById('tabFis').classList.toggle('hidden', side !== 'fis');
