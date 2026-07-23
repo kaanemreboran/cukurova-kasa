@@ -914,14 +914,14 @@
       <h3>Yeni Kategori Ekle</h3>
       <div class="toolbar" style="margin-bottom:0;">
         <label>İşlem Tipi</label>
-        <select id="adminTip">
+        <select id="adminTip" onchange="updateAdminBankFieldsVisibility()">
           <option value="satis">Satışlar</option>
           <option value="tahsilat">Tahsilatlar</option>
           <option value="odeme">Ödemeler</option>
           <option value="masraf">Masraflar</option>
         </select>
         <label>Kategori Adı</label>
-        <input type="text" id="adminEtiket" placeholder="Örn: Sipay ile Satış" style="flex:1;min-width:180px;">
+        <input type="text" id="adminEtiket" placeholder="Örn: Garanti Banka Kart Satış" style="flex:1;min-width:180px;">
         <label>Komisyon %</label>
         <input type="number" step="0.01" id="adminKomisyon" placeholder="Örn: 1.57" style="width:100px;">
         <label>Renk</label>
@@ -930,7 +930,18 @@
         <button class="btn ghost hidden" id="adminCatCancelBtn" onclick="cancelEditCategory()">Vazgeç</button>
         <button class="btn" id="adminCatSaveBtn" onclick="addCategory()">Kategori Ekle</button>
       </div>
-      <p style="font-size:11.5px;color:var(--ink-dim);margin:10px 2px 0;">Komisyon oranı girilirse (örn. Vakıfbank/YKB gibi) tutar otomatik hesaplanıp "Hesaba Geçen" sütunu eklenir. Boş bırakılırsa tutar elle girilir.</p>
+      <div class="toolbar" id="adminBankFieldsWrap" style="margin-top:10px;">
+        <label>Banka</label>
+        <input type="text" id="adminBanka" placeholder="Örn: Garanti (banka ile ilgisizse boş bırak)" style="width:220px;">
+        <label>Ödeme Tipi</label>
+        <select id="adminOdemeTipi">
+          <option value="">— Seçiniz —</option>
+          <option value="kredi_karti">Kredi Kartı</option>
+          <option value="havale">Havale/EFT</option>
+        </select>
+      </div>
+      <p style="font-size:11.5px;color:var(--ink-dim);margin:10px 2px 0;">Komisyon oranı girilirse tutar otomatik hesaplanıp "Hesaba Geçen" sütunu eklenir. Boş bırakılırsa tutar elle girilir.<br>
+      <b>Banka</b> alanını doldurursan (örn. "Garanti") ve <b>Ödeme Tipi</b>'ni seçersen, bu kategori sağ paneldeki Kredi Kasa / Banka Hareketleri hesaplamalarına otomatik dahil olur. Aynı bankaya ait tüm kategorilerde (Kart Satış, Havale Satış, Kart/Havale Ödeme…) banka adını <b>aynı şekilde</b> yaz ki sistem bunları aynı banka altında birleştirsin.</p>
     </div>
     <div class="admin-card">
       <h3>Mevcut Özel Kategoriler</h3>
@@ -1047,15 +1058,19 @@ const SUPABASE_ANON_KEY = 'sb_publishable_XYTwnqgd3ol9VmYaUrSzzg_uMUqsnyn';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 /* ============================================================
-   KART KESİNTİ FORMÜLLERİ — orijinal Excel'den birebir alındı
+   KART KESİNTİ FORMÜLÜ — genel (yüzde bazlı) komisyon hesabı.
+   Vakıfbank (%1.57) ve YKB (%3.14) dahil TÜM banka/kart kategorileri artık
+   bu tek genel formülle çalışıyor (bkz. buildBankMethodObject). Böylece
+   admin panelinden eklenen yeni bankalar da otomatik doğru hesaplanıyor.
    ============================================================ */
-// Vakıfbank: net = tutar - tutar*1.57%
-function vakifNet(tutar){ return tutar - tutar*0.0157; }
-// Yapı Kredi (YKB): net = -(tutar - (tutar*97.01% + tutar*99.85%))  [Excel formülü birebir]
-function ykbNet(tutar){ return -(tutar - ((tutar*0.9701) + (tutar*0.9985))); }
+function genericCommissionNet(tutar, oranYuzde){ return tutar - tutar*(oranYuzde/100); }
 
 /* ============================================================
-   CONFIG — bölüm/ödeme yöntemi tanımları (spreadsheet'ten birebir)
+   CONFIG — bölüm/ödeme yöntemi tanımları
+   Banka/kart/havale kategorileri artık burada sabit (hardcoded) DEĞİL —
+   'kategoriler' tablosundan dinamik olarak yükleniyor (bkz. loadCustomCategories).
+   Burada sadece banka ile ilişkisi olmayan sabit yöntemler kalıyor:
+   nakit, mail order, genel kredi kartı ödemesi, masraf.
    ============================================================ */
 // islem_tipi: 'satis' | 'tahsilat' | 'odeme'
 const SECTIONS = {
@@ -1064,11 +1079,7 @@ const SECTIONS = {
     kodLabel: 'Stok Kodu', adLabel: 'Stok Adı',
     methods: [
       { key: 'nakit',        label: 'Nakit Satış',                  hesabaGecen: false },
-      { key: 'vakif_kredi',  label: 'Vakıfbank Kredi Kartı Satış',  hesabaGecen: true, commission: vakifNet, commissionLabel: '%1.57 komisyon' },
-      { key: 'ykb_kredi',    label: 'Yapı Kredi Kart Satış',        hesabaGecen: true, commission: ykbNet,   commissionLabel: '%3.14 komisyon' },
       { key: 'mailorder',    label: 'Mail Order Satış',             hesabaGecen: false, bayiPassthrough: true },
-      { key: 'vakif_havale', label: 'Vakıfbank Havale Satış',       hesabaGecen: false },
-      { key: 'ykb_havale',   label: 'YKB Havale Satış',             hesabaGecen: false },
     ]
   },
   tahsilat: {
@@ -1076,11 +1087,7 @@ const SECTIONS = {
     kodLabel: 'Cari Kodu', adLabel: 'Cari Adı',
     methods: [
       { key: 'nakit',        label: 'Nakit Tahsilat',                    hesabaGecen: false },
-      { key: 'vakif_kredi',  label: 'Vakıfbank Kredi Kartı Tahsilat',   hesabaGecen: true, commission: vakifNet, commissionLabel: '%1.57 komisyon' },
-      { key: 'ykb_kredi',    label: 'Yapı Kredi Kart Tahsilat',         hesabaGecen: true, commission: ykbNet,   commissionLabel: '%3.14 komisyon' },
       { key: 'mailorder',    label: 'Mail Order Tahsilat',              hesabaGecen: false },
-      { key: 'vakif_havale', label: 'Vakıfbank Havale Tahsilat',        hesabaGecen: false },
-      { key: 'ykb_havale',   label: 'YKB Havale Tahsilat',              hesabaGecen: false },
     ]
   },
   odeme: {
@@ -1090,8 +1097,6 @@ const SECTIONS = {
       { key: 'nakit',        label: 'Nakit Ödeme',            hesabaGecen: false },
       { key: 'kredi_karti',  label: 'Kredi Kartı ile Ödeme',  hesabaGecen: false },
       { key: 'mailorder',    label: 'Mail Order Ödeme',        hesabaGecen: false },
-      { key: 'vakif_havale', label: 'Vakıfbank Havale Ödeme', hesabaGecen: false },
-      { key: 'ykb_havale',   label: 'YKB Havale Ödeme',        hesabaGecen: false },
     ]
   },
   masraf: {
@@ -1103,6 +1108,15 @@ const SECTIONS = {
     ]
   }
 };
+
+// Bilinen banka etiketlerinden dahili (aksansız/lowercase) kod üretir.
+// Aynı bankaya ait tüm kategoriler (kart satış/tahsilat, havale satış/tahsilat/ödeme)
+// admin panelinde tutarlı yazıldığı sürece aynı koda düşer ve hesaplamalarda birleşir.
+function bankaKodu(bankaEtiket){ return slugify(bankaEtiket || ''); }
+
+// Eski (v4 ve öncesi) sabit vakif_devir / ykb_devir kolonlarının karşılık geldiği
+// yeni dinamik banka kodları. Sadece geriye dönük uyumluluk (bkz. mergeLegacyDevir) için.
+const LEGACY_DEVIR_COLUMNS = { vakifbank: 'vakif_devir', yapi_kredi: 'ykb_devir' };
 
 
 
@@ -1116,7 +1130,7 @@ let currentUser = localStorage.getItem('kasa_user') || '';
 let currentUsername = localStorage.getItem('kasa_username') || '';
 
 function blankState(tarih){
-  const s = { tarih, nakit_devir:0, vakif_devir:0, ykb_devir:0, kasa_mevcut:'', satis:{}, tahsilat:{}, odeme:{}, masraf:{} };
+  const s = { tarih, nakit_devir:0, banka_devirleri:{}, kasa_mevcut:'', satis:{}, tahsilat:{}, odeme:{}, masraf:{} };
   for (const tip of ['satis','tahsilat','odeme','masraf']){
     for (const m of SECTIONS[tip].methods){
       s[tip][m.key] = [];
@@ -1400,8 +1414,7 @@ async function loadFoyForDate(force){
       const prevDevir = await fetchPreviousClosingDevir(tarih);
       if (prevDevir){
         state.nakit_devir = prevDevir.nakit_devir;
-        state.vakif_devir = prevDevir.vakif_devir;
-        state.ykb_devir = prevDevir.ykb_devir;
+        state.banka_devirleri = prevDevir.banka_devirleri;
         toast(`Devir ${formatDateTR(prevDevir.tarih)} tarihinden otomatik getirildi ✓`);
       }
     } catch(err){
@@ -1416,8 +1429,7 @@ async function loadFoyForDate(force){
   foyId = foy.id; foyExists = true;
   state = blankState(tarih);
   state.nakit_devir = Number(foy.nakit_devir)||0;
-  state.vakif_devir = Number(foy.vakif_devir)||0;
-  state.ykb_devir = Number(foy.ykb_devir)||0;
+  state.banka_devirleri = mergeLegacyDevir(foy, foy.banka_devirleri);
   state.kasa_mevcut = foy.kasa_mevcut === null ? '' : Number(foy.kasa_mevcut);
 
   const { data: hareketler, error: err2 } = await sb.from('kasa_hareketleri').select('*').eq('foy_id', foy.id).order('sira', { ascending:true });
@@ -1445,6 +1457,21 @@ function setStatus(cls,label){
    OTOMATİK DEVİR — bir önceki kayıtlı föyün kapanış bakiyelerini
    (Nakit Durum, Vakıf/YKB Güncel Durum) yeni günün devir alanlarına taşır
    ============================================================ */
+// Eski (v4 ve öncesi) föylerde banka_devirleri boş/eksik olabilir — o durumda
+// sabit vakif_devir/ykb_devir kolonlarından geriye dönük olarak tamamlar.
+// Böylece geçmiş föy kayıtları hiç dokunulmadan doğru okunmaya devam eder.
+function mergeLegacyDevir(foyRow, bankaDevirleri){
+  const out = Object.assign({}, bankaDevirleri || {});
+  for (const kod in LEGACY_DEVIR_COLUMNS){
+    if (out[kod] === undefined || out[kod] === null){
+      const col = LEGACY_DEVIR_COLUMNS[kod];
+      const val = foyRow ? foyRow[col] : undefined;
+      if (val !== null && val !== undefined) out[kod] = Number(val)||0;
+    }
+  }
+  return out;
+}
+
 async function fetchPreviousClosingDevir(tarih){
   const { data: prevFoy, error } = await sb.from('kasa_foyleri').select('*').lt('tarih', tarih).order('tarih', { ascending:false }).limit(1).maybeSingle();
   if (error) throw error;
@@ -1452,8 +1479,7 @@ async function fetchPreviousClosingDevir(tarih){
 
   const prevState = blankState(prevFoy.tarih);
   prevState.nakit_devir = Number(prevFoy.nakit_devir)||0;
-  prevState.vakif_devir = Number(prevFoy.vakif_devir)||0;
-  prevState.ykb_devir = Number(prevFoy.ykb_devir)||0;
+  prevState.banka_devirleri = mergeLegacyDevir(prevFoy, prevFoy.banka_devirleri);
   prevState.kasa_mevcut = prevFoy.kasa_mevcut === null ? '' : Number(prevFoy.kasa_mevcut);
 
   const { data: hareketler, error: hErr } = await sb.from('kasa_hareketleri').select('*').eq('foy_id', prevFoy.id);
@@ -1467,11 +1493,12 @@ async function fetchPreviousClosingDevir(tarih){
 
   const r = computeSummary(prevState);
   const round2 = (n) => Math.round((Number(n)||0) * 100) / 100;
+  const bankaDevirleri = {};
+  for (const kod in r.bankalar) bankaDevirleri[kod] = round2(r.bankalar[kod].guncelDurum);
   return {
     tarih: prevFoy.tarih,
     nakit_devir: round2(r.nakitDurum),
-    vakif_devir: round2(r.vakifGuncelDurum),
-    ykb_devir: round2(r.ykbGuncelDurum)
+    banka_devirleri: bankaDevirleri
   };
 }
 
@@ -1665,20 +1692,27 @@ async function loadCustomCategories(){
     if (!SECTIONS[cat.islem_tipi]) continue;
     if (SECTIONS[cat.islem_tipi].methods.some(m => m.key === cat.anahtar)) continue; // zaten eklenmiş
     const oran = (cat.komisyon_oran === null || cat.komisyon_oran === undefined) ? null : Number(cat.komisyon_oran);
-    SECTIONS[cat.islem_tipi].methods.push(buildCustomMethodObject(cat.anahtar, cat.etiket, oran, cat.renk, cat.id));
+    SECTIONS[cat.islem_tipi].methods.push(
+      buildCustomMethodObject(cat.anahtar, cat.etiket, oran, cat.renk, cat.id, cat.banka || null, cat.odeme_tipi || null)
+    );
   }
   customCategoriesLoaded = true;
 }
 
-function buildCustomMethodObject(anahtar, etiket, oran, renk, catId){
+// banka: serbest metin banka etiketi (örn. "Garanti", "Vakıfbank") veya null (banka ile ilişkisiz kategori)
+// odeme_tipi: 'kredi_karti' | 'havale' | null — sağ paneldeki Kredi Kasa / Banka Hareketleri
+//             hesaplamalarının kategoriyi hangi kovaya koyacağını belirler.
+function buildCustomMethodObject(anahtar, etiket, oran, renk, catId, banka, odeme_tipi){
   const method = {
     key: anahtar, label: etiket,
     hesabaGecen: !!(oran && oran > 0),
     custom: true, catId,
-    komisyonOran: oran || null, customColor: renk || null
+    komisyonOran: oran || null, customColor: renk || null,
+    banka: banka || null, bankaKod: banka ? bankaKodu(banka) : null,
+    odeme_tipi: odeme_tipi || null
   };
   if (oran && oran > 0){
-    method.commission = (tutar) => tutar - tutar * (oran/100);
+    method.commission = (tutar) => genericCommissionNet(tutar, oran);
     method.commissionLabel = `%${oran} komisyon`;
   }
   return method;
@@ -1725,6 +1759,14 @@ function updateCatSaveBtnLabel(){
   if (cancelBtn) cancelBtn.classList.toggle('hidden', !editingCat);
 }
 
+// Banka/Ödeme Tipi alanları sadece Satış/Tahsilat/Ödeme kategorileri için anlamlı
+// (Masraf kategorileri zaten 'nakit' dışındakiler otomatik banka gideri sayılıyor).
+function updateAdminBankFieldsVisibility(){
+  const tip = document.getElementById('adminTip').value;
+  const wrap = document.getElementById('adminBankFieldsWrap');
+  if (wrap) wrap.classList.toggle('hidden', tip === 'masraf');
+}
+
 function editCategory(cat){
   editingCat = { catId: cat.catId, tip: cat.tip, anahtar: cat.key };
   document.getElementById('adminTip').value = cat.tip;
@@ -1732,7 +1774,10 @@ function editCategory(cat){
   document.getElementById('adminEtiket').value = cat.label;
   document.getElementById('adminKomisyon').value = cat.komisyonOran || '';
   document.getElementById('adminRenk').value = cat.customColor || '#94a3b8';
+  document.getElementById('adminBanka').value = cat.banka || '';
+  document.getElementById('adminOdemeTipi').value = cat.odeme_tipi || '';
   renderCategoryColorPalette(cat.customColor || '#94a3b8');
+  updateAdminBankFieldsVisibility();
   updateCatSaveBtnLabel();
   toast('Kategori düzenleme için forma yüklendi ✓');
 }
@@ -1743,7 +1788,10 @@ function cancelEditCategory(){
   document.getElementById('adminEtiket').value = '';
   document.getElementById('adminKomisyon').value = '';
   document.getElementById('adminRenk').value = '#94a3b8';
+  document.getElementById('adminBanka').value = '';
+  document.getElementById('adminOdemeTipi').value = '';
   renderCategoryColorPalette('#94a3b8');
+  updateAdminBankFieldsVisibility();
   updateCatSaveBtnLabel();
 }
 
@@ -1755,24 +1803,30 @@ async function addCategory(){
   const oranRaw = document.getElementById('adminKomisyon').value.trim();
   const oran = oranRaw === '' ? null : Number(oranRaw);
   const renk = document.getElementById('adminRenk').value || null;
+  const bankaRaw = document.getElementById('adminBanka').value.trim();
+  const banka = (tip !== 'masraf' && bankaRaw) ? bankaRaw : null;
+  const odemeTipiRaw = document.getElementById('adminOdemeTipi').value;
+  const odeme_tipi = (tip !== 'masraf' && odemeTipiRaw) ? odemeTipiRaw : null;
 
   try{
     if (editingCat){
-      const { error } = await sb.from('kategoriler').update({ etiket, komisyon_oran: oran, renk }).eq('id', editingCat.catId);
+      const { error } = await sb.from('kategoriler').update({ etiket, komisyon_oran: oran, renk, banka, odeme_tipi }).eq('id', editingCat.catId);
       if (error) throw error;
       const idx = SECTIONS[editingCat.tip].methods.findIndex(m => m.key === editingCat.anahtar);
-      if (idx >= 0) SECTIONS[editingCat.tip].methods[idx] = buildCustomMethodObject(editingCat.anahtar, etiket, oran, renk, editingCat.catId);
+      if (idx >= 0) SECTIONS[editingCat.tip].methods[idx] = buildCustomMethodObject(editingCat.anahtar, etiket, oran, renk, editingCat.catId, banka, odeme_tipi);
       toast('Kategori güncellendi ✓');
       cancelEditCategory();
     } else {
       const anahtar = slugify(etiket) + '_' + Math.random().toString(36).slice(2,6);
-      const { data, error } = await sb.from('kategoriler').insert({ islem_tipi: tip, anahtar, etiket, komisyon_oran: oran, renk }).select().single();
+      const { data, error } = await sb.from('kategoriler').insert({ islem_tipi: tip, anahtar, etiket, komisyon_oran: oran, renk, banka, odeme_tipi }).select().single();
       if (error) throw error;
-      SECTIONS[tip].methods.push(buildCustomMethodObject(data.anahtar, data.etiket, oran, renk, data.id));
+      SECTIONS[tip].methods.push(buildCustomMethodObject(data.anahtar, data.etiket, oran, renk, data.id, data.banka, data.odeme_tipi));
       if (state) state[tip][data.anahtar] = [];
       etiketInput.value = '';
       document.getElementById('adminKomisyon').value = '';
       document.getElementById('adminRenk').value = '#94a3b8';
+      document.getElementById('adminBanka').value = '';
+      document.getElementById('adminOdemeTipi').value = '';
       renderCategoryColorPalette('#94a3b8');
       toast('Kategori eklendi ✓');
     }
@@ -1826,8 +1880,10 @@ function renderAdminCatList(){
     row.className = 'admin-cat-row';
     const dotHtml = `<span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${c.customColor || '#94a3b8'};margin-right:8px;flex-shrink:0;"></span>`;
     const komisyonHtml = c.komisyonOran ? `<span style="color:var(--ink-dim);font-size:11px;margin-left:6px;">(%${c.komisyonOran} komisyon)</span>` : '';
+    const odemeTipiLabel = c.odeme_tipi === 'kredi_karti' ? 'Kredi Kartı' : (c.odeme_tipi === 'havale' ? 'Havale' : '');
+    const bankaHtml = c.banka ? `<span style="color:var(--ink-dim);font-size:11px;margin-left:6px;">🏦 ${escapeAttr(c.banka)}${odemeTipiLabel ? ' · ' + odemeTipiLabel : ''}</span>` : '';
     row.innerHTML = `
-      <span style="display:flex;align-items:center;">${dotHtml}<span class="tip-badge">${tipLabels[c.tip]}</span>${escapeAttr(c.label)}${komisyonHtml}</span>
+      <span style="display:flex;align-items:center;">${dotHtml}<span class="tip-badge">${tipLabels[c.tip]}</span>${escapeAttr(c.label)}${komisyonHtml}${bankaHtml}</span>
       <span style="display:flex;gap:4px;">
         <button class="icon-btn" title="Düzenle">✏️</button>
         <button class="icon-btn" title="Sil">✕</button>
@@ -2001,6 +2057,7 @@ function loadAdminPanel(){
   renderAdminCatList();
   loadAdminUsers();
   if (!editingCat) renderCategoryColorPalette(document.getElementById('adminRenk')?.value);
+  updateAdminBankFieldsVisibility();
 }
 
 function updateCell(tip, key, idx, field, value){
@@ -2089,18 +2146,6 @@ function computeSummary(customState){
   const kasaMevcut = s.kasa_mevcut === '' ? null : Number(s.kasa_mevcut);
   const fark = kasaMevcut === null ? null : (kasaMevcut - nakitDurum);
 
-  // ---- KREDİ KASA (kart satış + tahsilat, komisyon düşülmüş net tutar) ----
-  // Excel'deki Q14/Q15 formülü satış VE tahsilat kart tutarlarını birlikte toplar.
-  const vakifKrediSatisNet = sumHesabaGecen('satis','vakif_kredi',s);
-  const vakifKrediTahsilatNet = sumHesabaGecen('tahsilat','vakif_kredi',s);
-  const vakifbankToplamSatis = vakifKrediSatisNet + vakifKrediTahsilatNet;
-
-  const ykbKrediSatisNet = sumHesabaGecen('satis','ykb_kredi',s);
-  const ykbKrediTahsilatNet = sumHesabaGecen('tahsilat','ykb_kredi',s);
-  const ykbToplamSatis = ykbKrediSatisNet + ykbKrediTahsilatNet;
-
-  const toplamKrediliSatis = vakifbankToplamSatis + ykbToplamSatis;
-
   // ---- MAİL ORDER KASA ----
   const mailorderSatisTutar = sumRows('satis','mailorder',undefined,s);
   const mailorderTahsilatTutar = sumRows('tahsilat','mailorder',undefined,s);
@@ -2109,32 +2154,62 @@ function computeSummary(customState){
   const mailorderOdemeToplam = mailorderOdemeManuel + bayiyeAktarilanToplam;
   const mailorderNetKasaEtkisi = mailorderSatisToplam - mailorderOdemeToplam;
 
-  // ---- BANKA HAREKETLERİ ----
-  const bankaDevir = Number(s.vakif_devir||0) + Number(s.ykb_devir||0);
+  // ---- KREDİ KASA + BANKA HAREKETLERİ (dinamik, kategori özelliklerine göre) ----
+  // Hangi banka kategorileri var, kategori tanımlarından (SECTIONS) otomatik keşfedilir.
+  // Sabit 'vakif'/'ykb' anahtar kontrolü YOK — admin panelinden eklenen her yeni banka
+  // kategorisi (banka + ödeme_tipi bilgisiyle) otomatik olarak bu hesaba dahil olur.
+  const bankKodMap = {}; // kod -> { kod, label, hasKrediKarti }
+  for (const tip of ['satis','tahsilat','odeme']){
+    for (const m of SECTIONS[tip].methods){
+      if (!m.bankaKod) continue;
+      if (!bankKodMap[m.bankaKod]) bankKodMap[m.bankaKod] = { kod: m.bankaKod, label: m.banka, hasKrediKarti: false };
+      if (m.odeme_tipi === 'kredi_karti') bankKodMap[m.bankaKod].hasKrediKarti = true;
+    }
+  }
 
-  const vakifGelenHavale = sumRows('satis','vakif_havale',undefined,s) + sumRows('tahsilat','vakif_havale',undefined,s);
-  const vakifGidenHavale = sumRows('odeme','vakif_havale',undefined,s);
-  const vakifGunHareket = vakifGelenHavale - vakifGidenHavale;
-  // Excel Q38: sadece devir + havale hareketi — kart satışları dahil değil.
-  const vakifGuncelDurum = Number(s.vakif_devir||0) + vakifGunHareket;
+  function methodsForBank(tip, kod, odeme_tipi){
+    return SECTIONS[tip].methods.filter(m => m.bankaKod === kod && m.odeme_tipi === odeme_tipi);
+  }
+  function sumHesabaGecenForBank(tip, kod){
+    return methodsForBank(tip, kod, 'kredi_karti').reduce((a,m) => a + sumHesabaGecen(tip, m.key, s), 0);
+  }
+  function sumRowsForBank(tip, kod, odeme_tipi){
+    return methodsForBank(tip, kod, odeme_tipi).reduce((a,m) => a + sumRows(tip, m.key, undefined, s), 0);
+  }
 
-  const ykbGelenHavale = sumRows('satis','ykb_havale',undefined,s) + sumRows('tahsilat','ykb_havale',undefined,s);
-  const ykbGidenHavale = sumRows('odeme','ykb_havale',undefined,s);
-  const ykbGunHareket = ykbGelenHavale - ykbGidenHavale;
-  // Excel Q39: sadece devir + havale hareketi — kart satışları dahil değil.
-  const ykbGuncelDurum = Number(s.ykb_devir||0) + ykbGunHareket;
+  const bankalar = {};
+  for (const kod in bankKodMap){
+    const krediSatisNet = sumHesabaGecenForBank('satis', kod);
+    const krediTahsilatNet = sumHesabaGecenForBank('tahsilat', kod);
+    const krediToplam = krediSatisNet + krediTahsilatNet;
 
-  const bankalarGuncelDurum = vakifGuncelDurum + ykbGuncelDurum - masrafBanka;
+    const gelenHavale = sumRowsForBank('satis', kod, 'havale') + sumRowsForBank('tahsilat', kod, 'havale');
+    const gidenHavale = sumRowsForBank('odeme', kod, 'havale');
+    const gunHareket = gelenHavale - gidenHavale;
+    const devir = Number((s.banka_devirleri || {})[kod]) || 0;
+    // Not: kart satışları güncel durum hesabına dahil değil — sadece devir + havale hareketi
+    // (orijinal Excel mantığıyla birebir aynı: kredi kartı tutarları ayrı bir kasa/kova).
+    const guncelDurum = devir + gunHareket;
+
+    bankalar[kod] = {
+      kod, label: bankKodMap[kod].label, hasKrediKarti: bankKodMap[kod].hasKrediKarti,
+      krediSatisNet, krediTahsilatNet, krediToplam,
+      gelenHavale, gidenHavale, gunHareket, devir, guncelDurum
+    };
+  }
+
+  const toplamKrediliSatis = Object.values(bankalar).reduce((a,b) => a + b.krediToplam, 0);
+  const bankaDevir = Object.values(bankalar).reduce((a,b) => a + b.devir, 0);
+  const bankalarGuncelDurumOnMasraf = Object.values(bankalar).reduce((a,b) => a + b.guncelDurum, 0);
+  const bankalarGuncelDurum = bankalarGuncelDurumOnMasraf - masrafBanka;
   const bankaToplam = bankaDevir; // gün başı banka toplamı (devir)
 
   return {
     nakitGiris, nakitCikis, nakitDurum, kasaMevcut, fark,
-    vakifbankToplamSatis, ykbToplamSatis, toplamKrediliSatis,
+    bankalar, toplamKrediliSatis,
     mailorderSatisTutar, mailorderTahsilatTutar, mailorderSatisToplam,
     mailorderOdemeManuel, bayiyeAktarilanToplam, mailorderOdemeToplam, mailorderNetKasaEtkisi,
     bankaDevir, bankaToplam,
-    vakifGelenHavale, vakifGidenHavale, vakifGunHareket, vakifGuncelDurum,
-    ykbGelenHavale, ykbGidenHavale, ykbGunHareket, ykbGuncelDurum,
     bankalarGuncelDurum, masrafNakit, masrafBanka
   };
 }
@@ -2183,8 +2258,9 @@ function renderSummary(){
         <span class="sum-head-value" id="s-head-kredi">${fmt(r.toplamKrediliSatis)}</span>
       </div>
       <div class="sum-collapsible-body ${krediOpen ? '' : 'hidden'}">
-        <div class="sum-row"><span>Vakıfbank Toplam (satış+tahsilat, net)</span><b id="s-vakifToplam">${fmt(r.vakifbankToplamSatis)}</b></div>
-        <div class="sum-row"><span>YKB Toplam (satış+tahsilat, net)</span><b id="s-ykbToplam">${fmt(r.ykbToplamSatis)}</b></div>
+        ${Object.values(r.bankalar).filter(b => b.hasKrediKarti).map(b => `
+        <div class="sum-row"><span>${escapeAttr(b.label)} Toplam (satış+tahsilat, net)</span><b id="s-kredi-${b.kod}">${fmt(b.krediToplam)}</b></div>
+        `).join('') || '<div class="empty" style="font-size:12px;">Henüz kredi kartı kategorisi tanımlanmadı.</div>'}
         <div class="sum-row total"><span>Toplam Kredili Satış</span><b id="s-toplamKredi">${fmt(r.toplamKrediliSatis)}</b></div>
       </div>
     </div>
@@ -2213,26 +2289,33 @@ function renderSummary(){
         <span class="sum-head-value" id="s-head-banka">${fmt(r.bankalarGuncelDurum)}</span>
       </div>
       <div class="sum-collapsible-body ${bankaOpen ? '' : 'hidden'}">
-        <div class="sum-row"><span>Vakıfbank Devir</span><input type="number" step="0.01" value="${state.vakif_devir}" oninput="state.vakif_devir=Number(this.value)||0; renderSummarySoft();"></div>
-        <div class="sum-row"><span>Yapı Kredi Devir</span><input type="number" step="0.01" value="${state.ykb_devir}" oninput="state.ykb_devir=Number(this.value)||0; renderSummarySoft();"></div>
+        ${Object.values(r.bankalar).map(b => `
+        <div class="sum-row"><span>${escapeAttr(b.label)} Devir</span><input type="number" step="0.01" value="${b.devir}" oninput="setBankaDevir('${b.kod}', this.value)"></div>
+        `).join('') || '<div class="empty" style="font-size:12px;">Henüz banka kategorisi tanımlanmadı — Admin panelinden bir banka kategorisi ekleyerek başlayabilirsin.</div>'}
         <div class="sum-row total"><span>Banka Devir Toplam</span><b id="s-bankaDevir">${fmt(r.bankaDevir)}</b></div>
 
+        ${Object.values(r.bankalar).map(b => `
         <div style="height:1px;background:var(--line);margin:4px 0;"></div>
-        <div class="sum-row"><span>Vakıf Gelen Havale</span><b id="s-vakifGelen">${fmt(r.vakifGelenHavale)}</b></div>
-        <div class="sum-row"><span>Vakıf Giden Havale</span><b id="s-vakifGiden">${fmt(r.vakifGidenHavale)}</b></div>
-        <div class="sum-row"><span>Vakıf Gün Hareket</span><b id="s-vakifHareket">${fmt(r.vakifGunHareket)}</b></div>
-        <div class="sum-row total"><span>Vakıf Güncel Durum</span><b id="s-vakifDurum">${fmt(r.vakifGuncelDurum)}</b></div>
+        <div class="sum-row"><span>${escapeAttr(b.label)} Gelen Havale</span><b id="s-gelen-${b.kod}">${fmt(b.gelenHavale)}</b></div>
+        <div class="sum-row"><span>${escapeAttr(b.label)} Giden Havale</span><b id="s-giden-${b.kod}">${fmt(b.gidenHavale)}</b></div>
+        <div class="sum-row"><span>${escapeAttr(b.label)} Gün Hareket</span><b id="s-hareket-${b.kod}">${fmt(b.gunHareket)}</b></div>
+        <div class="sum-row total"><span>${escapeAttr(b.label)} Güncel Durum</span><b id="s-durum-${b.kod}">${fmt(b.guncelDurum)}</b></div>
+        `).join('')}
 
-        <div style="height:1px;background:var(--line);margin:4px 0;"></div>
-        <div class="sum-row"><span>YKB Gelen Havale</span><b id="s-ykbGelen">${fmt(r.ykbGelenHavale)}</b></div>
-        <div class="sum-row"><span>YKB Giden Havale</span><b id="s-ykbGiden">${fmt(r.ykbGidenHavale)}</b></div>
-        <div class="sum-row"><span>YKB Gün Hareket</span><b id="s-ykbHareket">${fmt(r.ykbGunHareket)}</b></div>
-        <div class="sum-row total"><span>YKB Güncel Durum</span><b id="s-ykbDurum">${fmt(r.ykbGuncelDurum)}</b></div>
+        ${r.masrafBanka ? `<div style="height:1px;background:var(--line);margin:4px 0;"></div>
+        <div class="sum-row"><span>Banka Masrafları (toplam düşülen)</span><b>-${fmt(r.masrafBanka)}</b></div>` : ''}
 
         <div class="sum-row total" style="margin-top:6px;"><span>Bankalar Güncel Durum</span><b id="s-bankalarDurum">${fmt(r.bankalarGuncelDurum)}</b></div>
       </div>
     </div>
   `;
+}
+
+// Banka devrini (gün başı bakiye) değiştirir — yeni banka eklendiğinde de otomatik çalışır.
+function setBankaDevir(kod, val){
+  if (!state.banka_devirleri) state.banka_devirleri = {};
+  state.banka_devirleri[kod] = Number(val)||0;
+  renderSummarySoft();
 }
 
 // Değerleri günceller ama DOM'u yeniden kurmaz — devir/kasa mevcut input'larının
@@ -2249,8 +2332,14 @@ function renderSummarySoft(){
     farkRow.classList.remove('fark-ok','fark-bad');
     if (r.fark !== null) farkRow.classList.add(Math.abs(r.fark) < 0.01 ? 'fark-ok' : 'fark-bad');
   }
-  set('s-vakifToplam', fmt(r.vakifbankToplamSatis));
-  set('s-ykbToplam', fmt(r.ykbToplamSatis));
+  for (const kod in r.bankalar){
+    const b = r.bankalar[kod];
+    set(`s-kredi-${kod}`, fmt(b.krediToplam));
+    set(`s-gelen-${kod}`, fmt(b.gelenHavale));
+    set(`s-giden-${kod}`, fmt(b.gidenHavale));
+    set(`s-hareket-${kod}`, fmt(b.gunHareket));
+    set(`s-durum-${kod}`, fmt(b.guncelDurum));
+  }
   set('s-toplamKredi', fmt(r.toplamKrediliSatis));
   set('s-moSatis', fmt(r.mailorderSatisTutar));
   set('s-moTahsilat', fmt(r.mailorderTahsilatTutar));
@@ -2260,14 +2349,6 @@ function renderSummarySoft(){
   set('s-moOdeme', fmt(r.mailorderOdemeToplam));
   set('s-moNet', fmt(r.mailorderNetKasaEtkisi));
   set('s-bankaDevir', fmt(r.bankaDevir));
-  set('s-vakifGelen', fmt(r.vakifGelenHavale));
-  set('s-vakifGiden', fmt(r.vakifGidenHavale));
-  set('s-vakifHareket', fmt(r.vakifGunHareket));
-  set('s-vakifDurum', fmt(r.vakifGuncelDurum));
-  set('s-ykbGelen', fmt(r.ykbGelenHavale));
-  set('s-ykbGiden', fmt(r.ykbGidenHavale));
-  set('s-ykbHareket', fmt(r.ykbGunHareket));
-  set('s-ykbDurum', fmt(r.ykbGuncelDurum));
   set('s-bankalarDurum', fmt(r.bankalarGuncelDurum));
 
   // katlanır kart başlıklarındaki özet rakamlar (kapalıyken de görünen kısım)
@@ -3755,8 +3836,7 @@ function printFoy(){
     <div><span>Nakit Durum</span><b>${fmt(r.nakitDurum)}</b></div>
     <div><span>Kasa Mevcut (sayım)</span><b>${r.kasaMevcut===null?'—':fmt(r.kasaMevcut)}</b></div>
     <div><span>Fark</span><b>${r.fark===null?'—':fmt(r.fark)}</b></div>
-    <div><span>Vakıfbank Toplam (net)</span><b>${fmt(r.vakifbankToplamSatis)}</b></div>
-    <div><span>YKB Toplam (net)</span><b>${fmt(r.ykbToplamSatis)}</b></div>
+    ${Object.values(r.bankalar).filter(b => b.hasKrediKarti).map(b => `<div><span>${escapeAttr(b.label)} Toplam (net)</span><b>${fmt(b.krediToplam)}</b></div>`).join('')}
     <div><span>Mail Order Net Kasa Etkisi</span><b>${fmt(r.mailorderNetKasaEtkisi)}</b></div>
     <div><span>Bankalar Güncel Durum</span><b>${fmt(r.bankalarGuncelDurum)}</b></div>
   </div>`;
@@ -3771,12 +3851,15 @@ async function saveFoy(){
   const btn = document.getElementById('saveBtn');
   btn.disabled = true; btn.textContent = 'Kaydediliyor…';
   try{
+    const bd = state.banka_devirleri || {};
     const payload = {
       tarih: state.tarih,
       durum: 'acik',
       nakit_devir: Number(state.nakit_devir)||0,
-      vakif_devir: Number(state.vakif_devir)||0,
-      ykb_devir: Number(state.ykb_devir)||0,
+      banka_devirleri: bd,
+      // Geriye dönük uyumluluk: eski sabit kolonlar da senkron tutulur (bkz. LEGACY_DEVIR_COLUMNS).
+      vakif_devir: Number(bd.vakifbank)||0,
+      ykb_devir: Number(bd.yapi_kredi)||0,
       kasa_mevcut: state.kasa_mevcut === '' ? null : Number(state.kasa_mevcut),
       olusturan: currentUser
     };
