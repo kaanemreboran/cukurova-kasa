@@ -1676,6 +1676,8 @@ function addRow(tip, key, hasHesabaGecen){
 function removeRow(tip, key, idx){
   state[tip][key].splice(idx,1);
   renderFoy();
+  // Satır silme işlemi "Föyü Kaydet"e basılmasını beklemeden anlık kaydedilsin.
+  saveFoy();
 }
 function findMethod(tip, key){
   return SECTIONS[tip].methods.find(m => m.key === key);
@@ -2117,7 +2119,12 @@ function sumRows(tip, key, field, customState){
 }
 function sumHesabaGecen(tip, key, customState){
   const st = customState || state;
-  return (st[tip][key]||[]).reduce((a,r)=> a + (Number(r.hesaba_gecen)||0), 0);
+  return (st[tip][key]||[]).reduce((a,r)=> {
+    // Komisyon oranı girilmemişse hesaba_gecen hep null kalır — bu durumda
+    // kesinti yok demektir, ham tutarı kullan (Kredi Kasa'nın "hep 0" görünmesini önler).
+    const val = (r.hesaba_gecen === null || r.hesaba_gecen === undefined) ? r.tutar : r.hesaba_gecen;
+    return a + (Number(val)||0);
+  }, 0);
 }
 
 function computeSummary(customState){
