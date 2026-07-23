@@ -2091,15 +2091,18 @@ function computeSummary(customState){
 
   // ---- KREDİ KASA (kart satış + tahsilat, komisyon düşülmüş net tutar) ----
   // Excel'deki Q14/Q15 formülü satış VE tahsilat kart tutarlarını birlikte toplar.
-  const vakifKrediSatisNet = sumHesabaGecen('satis','vakif_kredi',s);
-  const vakifKrediTahsilatNet = sumHesabaGecen('tahsilat','vakif_kredi',s);
-  const vakifbankToplamSatis = vakifKrediSatisNet + vakifKrediTahsilatNet;
-
-  const ykbKrediSatisNet = sumHesabaGecen('satis','ykb_kredi',s);
-  const ykbKrediTahsilatNet = sumHesabaGecen('tahsilat','ykb_kredi',s);
-  const ykbToplamSatis = ykbKrediSatisNet + ykbKrediTahsilatNet;
-
-  const toplamKrediliSatis = vakifbankToplamSatis + ykbToplamSatis;
+  // ---- KREDİ KASA (tüm banka kredi kartları otomatik) ----
+const toplamKrediliSatis =
+  ['satis','tahsilat'].reduce((toplam, tip)=>{
+    return toplam + SECTIONS[tip].methods
+      .filter(m => 
+        m.key.includes('kredi') ||
+        m.label.toLowerCase().includes('kart')
+      )
+      .reduce((sum,m)=>{
+        return sum + sumHesabaGecen(tip,m.key,s);
+      },0);
+  },0);
 
   // ---- MAİL ORDER KASA ----
   const mailorderSatisTutar = sumRows('satis','mailorder',undefined,s);
@@ -2109,12 +2112,23 @@ function computeSummary(customState){
   const mailorderOdemeToplam = mailorderOdemeManuel + bayiyeAktarilanToplam;
   const mailorderNetKasaEtkisi = mailorderSatisToplam - mailorderOdemeToplam;
 
-  // ---- BANKA HAREKETLERİ ----
-  const bankaDevir = Number(s.vakif_devir||0) + Number(s.ykb_devir||0);
+  // ---- BANKA HAREKETLERİ (otomatik banka kategorileri) ----
+const bankaHareketleri = ['satis','tahsilat','odeme']
+.reduce((toplam,tip)=>{
 
-  const vakifGelenHavale = sumRows('satis','vakif_havale',undefined,s) + sumRows('tahsilat','vakif_havale',undefined,s);
-  const vakifGidenHavale = sumRows('odeme','vakif_havale',undefined,s);
-  const vakifGunHareket = vakifGelenHavale - vakifGidenHavale;
+  return toplam + SECTIONS[tip].methods
+    .filter(m =>
+      m.key.includes('havale') ||
+      m.label.toLowerCase().includes('banka')
+    )
+    .reduce((sum,m)=>{
+      if(tip === 'odeme'){
+        return sum - sumRows(tip,m.key,undefined,s);
+      }
+      return sum + sumRows(tip,m.key,undefined,s);
+    },0);
+
+},0);
   // Excel Q38: sadece devir + havale hareketi — kart satışları dahil değil.
   const vakifGuncelDurum = Number(s.vakif_devir||0) + vakifGunHareket;
 
