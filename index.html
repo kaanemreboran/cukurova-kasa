@@ -2461,10 +2461,10 @@ function updateFisCell(idx, field, value){
   else row[field] = value === '' ? 0 : Number(value);
 
   if (field === 'kod'){
-    const yeniFiyat = tryAutoFillFiyat(row, value);
-    if (yeniFiyat !== null){
+    const match = tryAutoFillUrun(row, value, 'kod');
+    if (match && row.fiyat){
       const fiyatInput = document.getElementById(`fis-fiyat-${idx}`);
-      if (fiyatInput) fiyatInput.value = yeniFiyat;
+      if (fiyatInput) fiyatInput.value = row.fiyat;
     }
   }
 
@@ -2627,39 +2627,44 @@ let urunListe = []; // [{kod, ad, fiyat}]
 let urunListeLoaded = false;
 
 async function loadUrunListe(){
-  const { data, error } = await sb.from('fis_urunler').select('kod, ad, son_fiyat').order('ad');
+  const { data, error } = await sb.from('fis_urunler').select('kod, ad, son_fiyat, oem').order('ad');
   if (error) return;
-  urunListe = (data || []).map(r => ({ kod: r.kod || '', ad: r.ad || '', fiyat: Number(r.son_fiyat) || 0 }));
+  urunListe = (data || []).map(r => ({ kod: r.kod || '', ad: r.ad || '', fiyat: Number(r.son_fiyat) || 0, oem: r.oem || '' }));
   urunListeLoaded = true;
 }
 
-// Girilen stok koduyla birebir eşleşen ve kayıtlı bir fiyatı olan ürün varsa
-// satırın fiyatını otomatik doldurur (Fiş ve Teklif'te ortak kullanılır).
-// Eşleşme yoksa veya kayıtlı fiyat 0/boşsa null döner (elle girilen fiyata dokunmaz).
-function tryAutoFillFiyat(row, kodValue){
-  const kod = (kodValue || '').trim();
-  if (!kod) return null;
-  const match = urunListe.find(u => (u.kod || '').trim().toLocaleLowerCase('tr-TR') === kod.toLocaleLowerCase('tr-TR'));
-  if (match && match.fiyat){
-    row.fiyat = match.fiyat;
-    return match.fiyat;
-  }
-  return null;
+// Girilen değeri (stok kodu VEYA OEM) urunListe içinde arar. matchField 'kod' ya da 'oem' olabilir.
+// Eşleşme bulunursa fiyatı (ve OEM eşleşmesiyse ayrıca stok kodunu) satıra yazar.
+function tryAutoFillUrun(row, value, matchField){
+  const val = (value || '').trim();
+  if (!val) return null;
+  const norm = (s) => (s || '').trim().toLocaleLowerCase('tr-TR');
+  const match = urunListe.find(u => norm(u[matchField]) === norm(val));
+  if (!match) return null;
+  if (match.fiyat) row.fiyat = match.fiyat;
+  if (matchField === 'oem' && match.kod) row.kod = match.kod;
+  return match;
 }
 
-async function saveUrunIfNew(kod, ad, fiyat){
+async function saveUrunIfNew(kod, ad, fiyat, oem){
   if (!kod && !ad) return;
   const fiyatNum = Number(fiyat) || 0;
+  const oemVal = (oem || '').trim();
 
   if (kod){
     const existing = urunListe.find(u => (u.kod || '') === kod);
     if (existing){
-      // Ürün zaten kayıtlı — bu sefer farklı bir fiyattan satıldıysa, kayıtlı
-      // (son) fiyatı güncelle. Böylece bir sonraki fişte kod yazılınca en
-      // güncel fiyat otomatik gelir (ilk kaydedilen fiyatta takılı kalmaz).
-      if (fiyatNum > 0 && fiyatNum !== existing.fiyat){
-        const { error } = await sb.from('fis_urunler').update({ son_fiyat: fiyatNum }).eq('kod', kod);
-        if (!error) existing.fiyat = fiyatNum;
+      // Ürün zaten kayıtlı — fiyat değiştiyse ve/veya yeni bir OEM bilgisi
+      // girildiyse (daha önce boştuysa) güncelle.
+      const updatePayload = {};
+      if (fiyatNum > 0 && fiyatNum !== existing.fiyat) updatePayload.son_fiyat = fiyatNum;
+      if (oemVal && oemVal !== existing.oem) updatePayload.oem = oemVal;
+      if (Object.keys(updatePayload).length){
+        const { error } = await sb.from('fis_urunler').update(updatePayload).eq('kod', kod);
+        if (!error){
+          if (updatePayload.son_fiyat !== undefined) existing.fiyat = updatePayload.son_fiyat;
+          if (updatePayload.oem !== undefined) existing.oem = updatePayload.oem;
+        }
       }
       return;
     }
@@ -2668,9 +2673,9 @@ async function saveUrunIfNew(kod, ad, fiyat){
     if (adExists) return;
   }
 
-  const { data, error } = await sb.from('fis_urunler').insert({ kod: kod || null, ad: ad || null, son_fiyat: fiyatNum || null }).select().single();
+  const { data, error } = await sb.from('fis_urunler').insert({ kod: kod || null, ad: ad || null, son_fiyat: fiyatNum || null, oem: oemVal || null }).select().single();
   if (!error && data){
-    urunListe.push({ kod: data.kod || '', ad: data.ad || '', fiyat: Number(data.son_fiyat) || 0 });
+    urunListe.push({ kod: data.kod || '', ad: data.ad || '', fiyat: Number(data.son_fiyat) || 0, oem: data.oem || '' });
   }
   // hata olursa (örn. ağ sorunu) sessizce geç — fiş kaydı zaten tamamlandı
 }
@@ -3353,10 +3358,23 @@ function updateTeklifCell(idx, field, value){
   else row[field] = value === '' ? 0 : Number(value);
 
   if (field === 'kod'){
-    const yeniFiyat = tryAutoFillFiyat(row, value);
-    if (yeniFiyat !== null){
+    const match = tryAutoFillUrun(row, value, 'kod');
+    if (match && row.fiyat){
       const fiyatInput = document.getElementById(`teklif-fiyat-${idx}`);
-      if (fiyatInput) fiyatInput.value = yeniFiyat;
+      if (fiyatInput) fiyatInput.value = row.fiyat;
+    }
+  }
+  if (field === 'oem'){
+    const match = tryAutoFillUrun(row, value, 'oem');
+    if (match){
+      if (row.kod){
+        const kodInput = document.getElementById(`teklif-kod-${idx}`);
+        if (kodInput) kodInput.value = row.kod;
+      }
+      if (row.fiyat){
+        const fiyatInput = document.getElementById(`teklif-fiyat-${idx}`);
+        if (fiyatInput) fiyatInput.value = row.fiyat;
+      }
     }
   }
 
@@ -3376,9 +3394,10 @@ function renderTeklifTotalsOnly(){
   set('teklifGenelToplam2', t.genelToplam);
 }
 function showTeklifUrunDropdown(idx, field, query){
-  const source = field === 'kod'
-    ? [...new Set(urunListe.map(u => u.kod).filter(Boolean))]
-    : [...new Set(urunListe.map(u => u.ad).filter(Boolean))];
+  let source;
+  if (field === 'kod') source = [...new Set(urunListe.map(u => u.kod).filter(Boolean))];
+  else if (field === 'oem') source = [...new Set(urunListe.map(u => u.oem).filter(Boolean))];
+  else source = [...new Set(urunListe.map(u => u.ad).filter(Boolean))];
   showAutocompleteDropdown(`teklif-${field}-${idx}`, `teklif-${field}-dropdown-${idx}`, source, query, (value) => {
     updateTeklifCell(idx, field, value);
   }, 3);
@@ -3399,7 +3418,13 @@ function renderTeklifRows(){
           onblur="hideDropdownDelayed('teklif-kod-dropdown-${idx}')">
         <div class="autocomplete-list hidden" id="teklif-kod-dropdown-${idx}"></div>
       </td>
-      <td><input type="text" value="${escapeAttr(row.oem)}" oninput="updateTeklifCell(${idx},'oem',this.value)"></td>
+      <td style="position:relative;">
+        <input type="text" id="teklif-oem-${idx}" autocomplete="off" value="${escapeAttr(row.oem)}"
+          oninput="updateTeklifCell(${idx},'oem',this.value); showTeklifUrunDropdown(${idx},'oem',this.value)"
+          onfocus="showTeklifUrunDropdown(${idx},'oem',this.value)"
+          onblur="hideDropdownDelayed('teklif-oem-dropdown-${idx}')">
+        <div class="autocomplete-list hidden" id="teklif-oem-dropdown-${idx}"></div>
+      </td>
       <td><input type="text" value="${escapeAttr(row.marka)}" oninput="updateTeklifCell(${idx},'marka',this.value)"></td>
       <td style="position:relative;">
         <input type="text" id="teklif-ad-${idx}" autocomplete="off" value="${escapeAttr(row.ad)}"
@@ -3490,7 +3515,7 @@ async function saveTeklif(){
       toast('Teklif kaydedildi ✓');
     }
     for (const row of teklifRows){
-      if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat);
+      if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat, row.oem);
     }
     // Başarıyla kaydedildi/güncellendi — bir sonraki teklif için formu temizle
     ['teklifCariKod','teklifCariAdi','teklifPlaka','teklifTelefon','teklifSaseNo','teklifMarka','teklifModel','teklifModelYili'].forEach(id => {
