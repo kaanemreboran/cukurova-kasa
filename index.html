@@ -2460,6 +2460,14 @@ function updateFisCell(idx, field, value){
   if (field === 'kod' || field === 'ad') row[field] = value;
   else row[field] = value === '' ? 0 : Number(value);
 
+  if (field === 'kod'){
+    const yeniFiyat = tryAutoFillFiyat(row, value);
+    if (yeniFiyat !== null){
+      const fiyatInput = document.getElementById(`fis-fiyat-${idx}`);
+      if (fiyatInput) fiyatInput.value = yeniFiyat;
+    }
+  }
+
   renderFisRowTutar(idx);
   renderFisTotalsOnly();
 }
@@ -2623,6 +2631,20 @@ async function loadUrunListe(){
   if (error) return;
   urunListe = (data || []).map(r => ({ kod: r.kod || '', ad: r.ad || '', fiyat: Number(r.son_fiyat) || 0 }));
   urunListeLoaded = true;
+}
+
+// Girilen stok koduyla birebir eşleşen ve kayıtlı bir fiyatı olan ürün varsa
+// satırın fiyatını otomatik doldurur (Fiş ve Teklif'te ortak kullanılır).
+// Eşleşme yoksa veya kayıtlı fiyat 0/boşsa null döner (elle girilen fiyata dokunmaz).
+function tryAutoFillFiyat(row, kodValue){
+  const kod = (kodValue || '').trim();
+  if (!kod) return null;
+  const match = urunListe.find(u => (u.kod || '').trim().toLocaleLowerCase('tr-TR') === kod.toLocaleLowerCase('tr-TR'));
+  if (match && match.fiyat){
+    row.fiyat = match.fiyat;
+    return match.fiyat;
+  }
+  return null;
 }
 
 async function saveUrunIfNew(kod, ad, fiyat){
@@ -3312,6 +3334,15 @@ function updateTeklifCell(idx, field, value){
   const row = teklifRows[idx];
   if (field === 'kod' || field === 'oem' || field === 'marka' || field === 'ad') row[field] = value;
   else row[field] = value === '' ? 0 : Number(value);
+
+  if (field === 'kod'){
+    const yeniFiyat = tryAutoFillFiyat(row, value);
+    if (yeniFiyat !== null){
+      const fiyatInput = document.getElementById(`teklif-fiyat-${idx}`);
+      if (fiyatInput) fiyatInput.value = yeniFiyat;
+    }
+  }
+
   renderTeklifRowTutar(idx);
   renderTeklifTotalsOnly();
 }
@@ -3361,7 +3392,7 @@ function renderTeklifRows(){
         <div class="autocomplete-list hidden" id="teklif-ad-dropdown-${idx}"></div>
       </td>
       <td class="tutar-col"><input type="number" step="1" value="${row.adet}" oninput="updateTeklifCell(${idx},'adet',this.value)"></td>
-      <td class="tutar-col"><input type="number" step="0.01" value="${row.fiyat}" oninput="updateTeklifCell(${idx},'fiyat',this.value)"></td>
+      <td class="tutar-col"><input type="number" id="teklif-fiyat-${idx}" step="0.01" value="${row.fiyat}" oninput="updateTeklifCell(${idx},'fiyat',this.value)"></td>
       <td class="tutar-col"><input type="number" step="1" value="${row.isk1}" oninput="updateTeklifCell(${idx},'isk1',this.value)"></td>
       <td class="tutar-col"><input type="number" step="1" value="${row.isk2}" oninput="updateTeklifCell(${idx},'isk2',this.value)"></td>
       <td class="tutar-col"><input type="number" step="1" value="${row.kdv}" oninput="updateTeklifCell(${idx},'kdv',this.value)"></td>
