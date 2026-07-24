@@ -2649,9 +2649,26 @@ function tryAutoFillFiyat(row, kodValue){
 
 async function saveUrunIfNew(kod, ad, fiyat){
   if (!kod && !ad) return;
-  const exists = urunListe.some(u => (u.kod||'') === (kod||'') && (u.ad||'') === (ad||''));
-  if (exists) return;
-  const { data, error } = await sb.from('fis_urunler').insert({ kod: kod || null, ad: ad || null, son_fiyat: fiyat || null }).select().single();
+  const fiyatNum = Number(fiyat) || 0;
+
+  if (kod){
+    const existing = urunListe.find(u => (u.kod || '') === kod);
+    if (existing){
+      // Ürün zaten kayıtlı — bu sefer farklı bir fiyattan satıldıysa, kayıtlı
+      // (son) fiyatı güncelle. Böylece bir sonraki fişte kod yazılınca en
+      // güncel fiyat otomatik gelir (ilk kaydedilen fiyatta takılı kalmaz).
+      if (fiyatNum > 0 && fiyatNum !== existing.fiyat){
+        const { error } = await sb.from('fis_urunler').update({ son_fiyat: fiyatNum }).eq('kod', kod);
+        if (!error) existing.fiyat = fiyatNum;
+      }
+      return;
+    }
+  } else {
+    const adExists = urunListe.some(u => !u.kod && (u.ad||'') === (ad||''));
+    if (adExists) return;
+  }
+
+  const { data, error } = await sb.from('fis_urunler').insert({ kod: kod || null, ad: ad || null, son_fiyat: fiyatNum || null }).select().single();
   if (!error && data){
     urunListe.push({ kod: data.kod || '', ad: data.ad || '', fiyat: Number(data.son_fiyat) || 0 });
   }
