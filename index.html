@@ -993,8 +993,13 @@
         <input type="text" id="adminUrunKod" placeholder="Örn: 6PK1530" style="width:160px;">
         <label>Ürün Adı</label>
         <input type="text" id="adminUrunAd" placeholder="Örn: V KAYIŞI ZEGEN" style="flex:1;min-width:200px;">
+        <label>OEM</label>
+        <input type="text" id="adminUrunOem" placeholder="OEM no (varsa)" style="width:150px;">
+        <label>Fiyat</label>
+        <input type="number" step="0.01" id="adminUrunFiyat" placeholder="Son fiyat (varsa)" style="width:120px;">
         <button class="btn" onclick="adminAddUrun()">Ürün Ekle</button>
       </div>
+      <p style="font-size:11.5px;color:var(--ink-dim);margin:-6px 2px 10px;">OEM ve Fiyat isteğe bağlıdır — girersen, Teklif/Fiş'te bu ürünün kodu veya OEM'i yazıldığında fiyat otomatik gelir.</p>
       <div id="adminUrunErr" style="color:var(--red);font-size:12px;margin:-8px 0 10px;display:none;"></div>
       <div id="adminUrunList"><div class="empty">Yükleniyor…</div></div>
     </div>
@@ -2012,14 +2017,19 @@ async function adminAddUrun(){
   el('adminUrunErr').style.display = 'none';
   const kod = el('adminUrunKod').value.trim();
   const ad = el('adminUrunAd').value.trim();
+  const oem = el('adminUrunOem').value.trim();
+  const fiyatRaw = el('adminUrunFiyat').value.trim();
+  const fiyat = fiyatRaw === '' ? null : Number(fiyatRaw);
   if (!kod && !ad){ el('adminUrunErr').textContent = 'Ürün kodu veya adı gerekli'; el('adminUrunErr').style.display = 'block'; return; }
   try{
-    const { error } = await sb.from('fis_urunler').insert({ kod: kod || null, ad: ad || null });
+    const { error } = await sb.from('fis_urunler').insert({ kod: kod || null, ad: ad || null, oem: oem || null, son_fiyat: fiyat });
     if (error) throw error;
     el('adminUrunKod').value = '';
     el('adminUrunAd').value = '';
+    el('adminUrunOem').value = '';
+    el('adminUrunFiyat').value = '';
     toast('Ürün eklendi ✓');
-    urunListe.push({ kod, ad, fiyat: 0 });
+    urunListe.push({ kod, ad, fiyat: fiyat || 0, oem });
     loadAdminUrunList();
   } catch(err){
     el('adminUrunErr').textContent = 'Hata: ' + err.message; el('adminUrunErr').style.display = 'block';
@@ -2028,14 +2038,16 @@ async function adminAddUrun(){
 
 async function loadAdminUrunList(){
   const el = document.getElementById('adminUrunList');
-  const { data, error } = await sb.from('fis_urunler').select('id, kod, ad').order('ad');
+  const { data, error } = await sb.from('fis_urunler').select('id, kod, ad, oem, son_fiyat').order('ad');
   if (error){ el.innerHTML = '<div class="empty">Hata: ' + error.message + '</div>'; return; }
   if (!data || !data.length){ el.innerHTML = '<div class="empty">Henüz ürün eklenmedi.</div>'; return; }
   el.innerHTML = '';
   for (const u of data){
     const row = document.createElement('div');
     row.className = 'admin-cat-row';
-    row.innerHTML = `<span>${u.kod ? `<span class="tip-badge">${escapeAttr(u.kod)}</span>` : ''}${escapeAttr(u.ad || '')}</span><button class="icon-btn" title="Sil">✕</button>`;
+    const oemHtml = u.oem ? `<span style="color:var(--ink-dim);font-size:11px;margin-left:6px;">OEM: ${escapeAttr(u.oem)}</span>` : '';
+    const fiyatHtml = u.son_fiyat ? `<span style="color:var(--ink-dim);font-size:11px;margin-left:6px;">${fmt(u.son_fiyat)} ₺</span>` : '';
+    row.innerHTML = `<span>${u.kod ? `<span class="tip-badge">${escapeAttr(u.kod)}</span>` : ''}${escapeAttr(u.ad || '')}${oemHtml}${fiyatHtml}</span><button class="icon-btn" title="Sil">✕</button>`;
     row.querySelector('button').onclick = () => adminDeleteUrun(u.id, u.kod, u.ad);
     el.appendChild(row);
   }
@@ -2054,6 +2066,7 @@ async function adminDeleteUrun(id, kod, ad){
     toast('Silme hatası: ' + err.message, true);
   }
 }
+
 
 function loadAdminPanel(){
   renderAdminCatList();
