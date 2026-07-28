@@ -1103,7 +1103,7 @@ const SECTIONS = {
     kodLabel: 'Cari Kodu', adLabel: 'Cari Adı',
     methods: [
       { key: 'nakit',        label: 'Nakit Tahsilat',                    hesabaGecen: false },
-      { key: 'mailorder',    label: 'Mail Order Tahsilat',              hesabaGecen: false },
+      { key: 'mailorder',    label: 'Mail Order Tahsilat',              hesabaGecen: false, bayiPassthrough: true },
     ]
   },
   odeme: {
@@ -1112,7 +1112,7 @@ const SECTIONS = {
     methods: [
       { key: 'nakit',        label: 'Nakit Ödeme',            hesabaGecen: false },
       { key: 'kredi_karti',  label: 'Kredi Kartı ile Ödeme',  hesabaGecen: false },
-      { key: 'mailorder',    label: 'Mail Order Ödeme',        hesabaGecen: false },
+      { key: 'mailorder',    label: 'Mail Order Ödeme',        hesabaGecen: false, bayiPassthrough: true },
     ]
   },
   masraf: {
@@ -1640,7 +1640,9 @@ function buildMethodBody(tip, method){
   if (showBayi){
     const note = document.createElement('div');
     note.style.cssText = 'font-size:11.5px;color:var(--ink-dim);padding:2px 0 8px;';
-    note.textContent = '"Bayiye Direkt" işaretlenen satırlar, tutarı otomatik olarak ödeme tarafından düşer (net kasa etkisi sıfır) ve Mail Order özetinde ayrı gösterilir.';
+    note.textContent = (tip === 'odeme')
+      ? '"Bayiye Direkt" işaretlenen satırlar, aslında bizim kasamızdan çıkmadığı (bayiye başkası tarafından direkt ödendiği) için kasa çıkışı toplamından düşülür (net kasa etkisi sıfır).'
+      : '"Bayiye Direkt" işaretlenen satırlar, tutarı otomatik olarak ödeme tarafından düşer (net kasa etkisi sıfır) ve Mail Order özetinde ayrı gösterilir.';
     body.appendChild(note);
   }
 
@@ -2157,9 +2159,17 @@ function computeSummary(customState){
   const s = customState || state;
 
   // ---- BAYİYE DİREKT AKTARILAN (mail order pass-through) ----
-  // Müşteriden alınan mail order tutarı hiç kasaya girmeden doğrudan parça bayisine gidiyor.
-  // Satış tarafında tam giriliyor, burada hesaplanan tutar otomatik "ödeme" gibi düşülüyor.
-  const bayiyeAktarilanToplam = (s.satis.mailorder || [])
+  // Satış/Tahsilat tarafı: müşteriden alınan mail order tutarı hiç kasaya girmeden
+  // doğrudan parça bayisine gidiyor. Tam giriliyor (raporlamada görünsün diye),
+  // ama burada hesaplanan tutar otomatik "ödeme" gibi düşülüp net kasa etkisi sıfırlanıyor.
+  const bayiyeAktarilanToplam =
+    (s.satis.mailorder || []).filter(r => r.bayiye_direkt).reduce((a,r) => a + (Number(r.tutar)||0), 0) +
+    (s.tahsilat.mailorder || []).filter(r => r.bayiye_direkt).reduce((a,r) => a + (Number(r.tutar)||0), 0);
+
+  // Ödeme tarafı: burada "Bayiye Direkt" işaretlenen bir ödeme, aslında bizim
+  // kasamızdan hiç çıkmamış demektir (bayiye başkası tarafından direkt ödenmiş) —
+  // bu yüzden manuel ödeme toplamından DÜŞÜLÜR, tersine bir mantık.
+  const odemeBayiyeDirektToplam = (s.odeme.mailorder || [])
     .filter(r => r.bayiye_direkt)
     .reduce((a,r) => a + (Number(r.tutar)||0), 0);
 
@@ -2183,7 +2193,8 @@ function computeSummary(customState){
   const mailorderSatisTutar = sumRows('satis','mailorder',undefined,s);
   const mailorderTahsilatTutar = sumRows('tahsilat','mailorder',undefined,s);
   const mailorderSatisToplam = mailorderSatisTutar + mailorderTahsilatTutar; // Excel Q20 mantığı (satış+tahsilat)
-  const mailorderOdemeManuel = sumRows('odeme','mailorder',undefined,s);
+  const mailorderOdemeManuelTumu = sumRows('odeme','mailorder',undefined,s);
+  const mailorderOdemeManuel = mailorderOdemeManuelTumu - odemeBayiyeDirektToplam;
   const mailorderOdemeToplam = mailorderOdemeManuel + bayiyeAktarilanToplam;
   const mailorderNetKasaEtkisi = mailorderSatisToplam - mailorderOdemeToplam;
 
@@ -2241,7 +2252,7 @@ function computeSummary(customState){
     nakitGiris, nakitCikis, nakitDurum, kasaMevcut, fark,
     bankalar, toplamKrediliSatis,
     mailorderSatisTutar, mailorderTahsilatTutar, mailorderSatisToplam,
-    mailorderOdemeManuel, bayiyeAktarilanToplam, mailorderOdemeToplam, mailorderNetKasaEtkisi,
+    mailorderOdemeManuelTumu, odemeBayiyeDirektToplam, mailorderOdemeManuel, bayiyeAktarilanToplam, mailorderOdemeToplam, mailorderNetKasaEtkisi,
     bankaDevir, bankaToplam,
     bankalarGuncelDurum, masrafNakit, masrafBanka
   };
@@ -2308,8 +2319,10 @@ function renderSummary(){
         <div class="sum-row"><span>Satış Tutarı</span><b id="s-moSatis">${fmt(r.mailorderSatisTutar)}</b></div>
         <div class="sum-row"><span>Tahsilat Tutarı</span><b id="s-moTahsilat">${fmt(r.mailorderTahsilatTutar)}</b></div>
         <div class="sum-row total"><span>Satış+Tahsilat Toplam</span><b id="s-moToplam">${fmt(r.mailorderSatisToplam)}</b></div>
-        <div class="sum-row"><span>Ödeme (manuel)</span><b id="s-moOdemeManuel">${fmt(r.mailorderOdemeManuel)}</b></div>
-        <div class="sum-row"><span>Bayiye Direkt Aktarılan (oto)</span><b id="s-bayiAktarilan">${fmt(r.bayiyeAktarilanToplam)}</b></div>
+        <div class="sum-row"><span>Ödeme (girilen, tümü)</span><b id="s-moOdemeManuelTumu">${fmt(r.mailorderOdemeManuelTumu)}</b></div>
+        <div class="sum-row"><span>Ödeme - Bayiye Direkt (oto, dışlanan)</span><b id="s-odemeBayiDirekt">-${fmt(r.odemeBayiyeDirektToplam)}</b></div>
+        <div class="sum-row"><span>Ödeme (net)</span><b id="s-moOdemeManuel">${fmt(r.mailorderOdemeManuel)}</b></div>
+        <div class="sum-row"><span>Satış/Tahsilat - Bayiye Direkt Aktarılan (oto)</span><b id="s-bayiAktarilan">${fmt(r.bayiyeAktarilanToplam)}</b></div>
         <div class="sum-row total"><span>Ödeme Toplam</span><b id="s-moOdeme">${fmt(r.mailorderOdemeToplam)}</b></div>
         <div class="sum-row total"><span>Net Kasa Etkisi</span><b id="s-moNet">${fmt(r.mailorderNetKasaEtkisi)}</b></div>
       </div>
@@ -2377,6 +2390,8 @@ function renderSummarySoft(){
   set('s-moSatis', fmt(r.mailorderSatisTutar));
   set('s-moTahsilat', fmt(r.mailorderTahsilatTutar));
   set('s-moToplam', fmt(r.mailorderSatisToplam));
+  set('s-moOdemeManuelTumu', fmt(r.mailorderOdemeManuelTumu));
+  set('s-odemeBayiDirekt', '-' + fmt(r.odemeBayiyeDirektToplam));
   set('s-moOdemeManuel', fmt(r.mailorderOdemeManuel));
   set('s-bayiAktarilan', fmt(r.bayiyeAktarilanToplam));
   set('s-moOdeme', fmt(r.mailorderOdemeToplam));
