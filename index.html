@@ -969,6 +969,17 @@
         indirip bir yere kaydetmen önerilir.
       </p>
       <button class="btn" id="backupBtn" onclick="backupAllData()">💾 Tüm Verileri Yedekle</button>
+
+      <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line);">
+        <h3 style="margin-bottom:8px;">Otomatik Günlük Yedekleme</h3>
+        <p style="font-size:12.5px;color:var(--ink-dim);margin:0 0 10px;">
+          Uygulamayı her açtığında, o gün ilk açılışta otomatik olarak bir yedek alınır (günde en fazla 1 kere).
+          Chrome/Edge'de bir klasör seçersen yedek sessizce oraya kaydedilir; seçmezsen veya desteklemeyen
+          bir tarayıcıdaysan (Safari/iOS gibi) normal şekilde "İndirilenler" klasörüne iner.
+        </p>
+        <button class="btn ghost" onclick="chooseBackupFolder()">📁 Otomatik Yedekleme Klasörü Seç</button>
+        <div id="backupFolderStatus" style="font-size:11.5px;color:var(--ink-dim);margin-top:8px;"></div>
+      </div>
     </div>
   </section>
 
@@ -1382,6 +1393,7 @@ async function init(){
   if ('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(()=>{});
   }
+  runAutoDailyBackupIfNeeded();
 }
 
 function onDateChange(){ loadFoyForDate(); }
@@ -2073,6 +2085,7 @@ function loadAdminPanel(){
   loadAdminUsers();
   if (!editingCat) renderCategoryColorPalette(document.getElementById('adminRenk')?.value);
   updateAdminBankFieldsVisibility();
+  updateBackupFolderStatus();
 }
 
 function updateCell(tip, key, idx, field, value){
@@ -3169,66 +3182,77 @@ function downloadTeklifExcel(){
 /* ============================================================
    YEDEKLEME — tüm tabloları tek Excel dosyasına (her tablo ayrı sayfa) indirir
    ============================================================ */
+// Tüm tabloları tek bir Excel çalışma kitabı (blob) olarak üretir.
+// Hem manuel "Yedekle" butonu hem de otomatik günlük yedekleme bunu kullanır.
+async function buildBackupWorkbookBlob(){
+  if (typeof ExcelJS === 'undefined') throw new Error('Excel kütüphanesi yüklenemedi');
+
+  const tables = [
+    { name: 'kasa_foyleri',     label: 'Kasa Foyleri' },
+    { name: 'kasa_hareketleri', label: 'Kasa Hareketleri' },
+    { name: 'fisler',           label: 'Fisler' },
+    { name: 'teklifler',        label: 'Teklifler' },
+    { name: 'kategoriler',      label: 'Kategoriler' },
+    { name: 'fis_urunler',      label: 'Urunler' },
+    { name: 'fis_cariler',      label: 'Cariler' },
+    { name: 'kullanicilar',     label: 'Kullanicilar', excludeCols: ['sifre_hash'] },
+    { name: 'islem_gunlugu',    label: 'Islem Gunlugu' }
+  ];
+
+  const wb = new ExcelJS.Workbook();
+  wb.creator = 'Çukurova Otomotiv';
+  wb.created = new Date();
+
+  for (const t of tables){
+    const { data, error } = await sb.from(t.name).select('*');
+    const ws = wb.addWorksheet(t.label);
+    if (error){
+      ws.getCell(1,1).value = 'Okunamadı: ' + error.message;
+      continue;
+    }
+    if (!data || !data.length){
+      ws.getCell(1,1).value = 'Kayıt yok';
+      continue;
+    }
+    let cols = Object.keys(data[0]);
+    if (t.excludeCols) cols = cols.filter(c => !t.excludeCols.includes(c));
+
+    cols.forEach((c, i) => {
+      const cell = ws.getCell(1, i+1);
+      cell.value = c;
+      cell.font = { bold:true, size:10, color:{argb:'FFFFFFFF'} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF6366F1'} };
+    });
+    ws.getRow(1).height = 20;
+
+    data.forEach((row, rIdx) => {
+      cols.forEach((c, cIdx) => {
+        let val = row[c];
+        if (val !== null && typeof val === 'object') val = JSON.stringify(val);
+        ws.getCell(rIdx+2, cIdx+1).value = (val === null || val === undefined) ? '' : val;
+      });
+    });
+
+    cols.forEach((c, i) => { ws.getColumn(i+1).width = Math.max(12, Math.min(40, c.length + 4)); });
+    ws.views = [{ state:'frozen', ySplit:1 }];
+  }
+
+  const buffer = await wb.xlsx.writeBuffer();
+  return new Blob([buffer], { type:'application/octet-stream' });
+}
+
+function backupFileName(){
+  return `Cukurova_Yedek_${fmtDateISO(new Date())}.xlsx`;
+}
+
 async function backupAllData(){
-  if (typeof ExcelJS === 'undefined'){ toast('Excel kütüphanesi yüklenemedi — internet bağlantını kontrol et', true); return; }
   const btn = document.getElementById('backupBtn');
   if (btn){ btn.disabled = true; btn.textContent = 'Yedekleniyor…'; }
   try{
-    const tables = [
-      { name: 'kasa_foyleri',     label: 'Kasa Foyleri' },
-      { name: 'kasa_hareketleri', label: 'Kasa Hareketleri' },
-      { name: 'fisler',           label: 'Fisler' },
-      { name: 'teklifler',        label: 'Teklifler' },
-      { name: 'kategoriler',      label: 'Kategoriler' },
-      { name: 'fis_urunler',      label: 'Urunler' },
-      { name: 'fis_cariler',      label: 'Cariler' },
-      { name: 'kullanicilar',     label: 'Kullanicilar', excludeCols: ['sifre_hash'] },
-      { name: 'islem_gunlugu',    label: 'Islem Gunlugu' }
-    ];
-
-    const wb = new ExcelJS.Workbook();
-    wb.creator = 'Çukurova Otomotiv';
-    wb.created = new Date();
-
-    for (const t of tables){
-      const { data, error } = await sb.from(t.name).select('*');
-      const ws = wb.addWorksheet(t.label);
-      if (error){
-        ws.getCell(1,1).value = 'Okunamadı: ' + error.message;
-        continue;
-      }
-      if (!data || !data.length){
-        ws.getCell(1,1).value = 'Kayıt yok';
-        continue;
-      }
-      let cols = Object.keys(data[0]);
-      if (t.excludeCols) cols = cols.filter(c => !t.excludeCols.includes(c));
-
-      cols.forEach((c, i) => {
-        const cell = ws.getCell(1, i+1);
-        cell.value = c;
-        cell.font = { bold:true, size:10, color:{argb:'FFFFFFFF'} };
-        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF6366F1'} };
-      });
-      ws.getRow(1).height = 20;
-
-      data.forEach((row, rIdx) => {
-        cols.forEach((c, cIdx) => {
-          let val = row[c];
-          if (val !== null && typeof val === 'object') val = JSON.stringify(val);
-          ws.getCell(rIdx+2, cIdx+1).value = (val === null || val === undefined) ? '' : val;
-        });
-      });
-
-      cols.forEach((c, i) => { ws.getColumn(i+1).width = Math.max(12, Math.min(40, c.length + 4)); });
-      ws.views = [{ state:'frozen', ySplit:1 }];
-    }
-
-    const buffer = await wb.xlsx.writeBuffer();
-    const blob = new Blob([buffer], { type:'application/octet-stream' });
+    const blob = await buildBackupWorkbookBlob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url; a.download = `Cukurova_Yedek_${fmtDateISO(new Date())}.xlsx`;
+    a.href = url; a.download = backupFileName();
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast('Yedek indirildi ✓');
@@ -3236,6 +3260,124 @@ async function backupAllData(){
     toast('Yedekleme hatası: ' + err.message, true);
   } finally {
     if (btn){ btn.disabled = false; btn.textContent = '💾 Tüm Verileri Yedekle'; }
+  }
+}
+
+/* ============================================================
+   OTOMATİK GÜNLÜK YEDEKLEME
+   Chrome/Edge (masaüstü, Android): kullanıcının bir kere seçtiği klasöre
+   (File System Access API) her gün ilk açılışta sessizce yazar.
+   Desteklemeyen tarayıcılar (Safari/iOS, Firefox): aynı işi normal
+   dosya indirme olarak yapar (İndirilenler klasörüne düşer).
+   Günde sadece 1 kere çalışır (localStorage ile takip edilir).
+   ============================================================ */
+const IDB_NAME = 'kasaFoyuDB';
+const IDB_STORE = 'handles';
+
+function idbOpen(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => { req.result.createObjectStore(IDB_STORE); };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbSet(key, value){
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(value, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbGet(key){
+  const db = await idbOpen();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function chooseBackupFolder(){
+  if (!('showDirectoryPicker' in window)){
+    toast('Bu tarayıcı klasör seçmeyi desteklemiyor (Chrome/Edge masaüstü veya Android\'de kullanılabilir) — yedek yine de otomatik olarak İndirilenler klasörüne inecek.', true);
+    return;
+  }
+  try{
+    const dirHandle = await window.showDirectoryPicker();
+    await idbSet('backupDirHandle', dirHandle);
+    toast('Yedekleme klasörü ayarlandı ✓ — her gün ilk açılışta otomatik oraya kaydedilecek');
+    updateBackupFolderStatus();
+  } catch(err){
+    if (err.name !== 'AbortError') toast('Klasör seçilemedi: ' + err.message, true);
+  }
+}
+
+async function updateBackupFolderStatus(){
+  const el = document.getElementById('backupFolderStatus');
+  if (!el) return;
+  if (!('showDirectoryPicker' in window)){
+    el.textContent = 'Bu tarayıcı/cihazda klasöre otomatik kaydetme desteklenmiyor — yedek her gün ilk açılışta "İndirilenler" klasörüne otomatik inecek.';
+    return;
+  }
+  try{
+    const handle = await idbGet('backupDirHandle');
+    if (handle){
+      el.textContent = `Otomatik yedekleme klasörü seçili: "${handle.name}" — her gün ilk açılışta buraya kaydedilir.`;
+    } else {
+      el.textContent = 'Henüz klasör seçmedin — seçmezsen yedek otomatik olarak "İndirilenler" klasörüne inecek.';
+    }
+  } catch(e){
+    el.textContent = '';
+  }
+}
+
+async function runAutoDailyBackupIfNeeded(){
+  const todayKey = 'kasa_auto_backup_' + fmtDateISO(new Date());
+  if (localStorage.getItem(todayKey)) return; // bugün zaten yapıldı
+
+  try{
+    const blob = await buildBackupWorkbookBlob();
+    const filename = backupFileName();
+    let savedToFolder = false;
+
+    if ('showDirectoryPicker' in window){
+      try{
+        const dirHandle = await idbGet('backupDirHandle');
+        if (dirHandle){
+          const perm = await dirHandle.queryPermission({ mode: 'readwrite' });
+          if (perm === 'granted'){
+            const fileHandle = await dirHandle.getFileHandle(filename, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            savedToFolder = true;
+            toast(`Günlük yedek otomatik kaydedildi ✓ (${dirHandle.name} klasörü)`);
+          }
+          // izin 'granted' değilse (örn. henüz onaylanmamış/geri alınmış) sessizce
+          // indirilenler klasörüne düşürme yoluna geçiyoruz — kullanıcıya sormadan
+          // izin isteyemeyiz (tarayıcı kuralı, kullanıcı etkileşimi gerektirir).
+        }
+      } catch(e){
+        // klasöre yazma başarısız oldu (izin kalkmış, klasör silinmiş vb.) — indirme yoluna düş
+      }
+    }
+
+    if (!savedToFolder){
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      toast('Günlük yedek otomatik indirildi ✓');
+    }
+
+    localStorage.setItem(todayKey, '1');
+  } catch(e){
+    // otomatik yedekleme sessizce başarısız olabilir (örn. internet yok) — uygulamayı bloklamasın
   }
 }
 
