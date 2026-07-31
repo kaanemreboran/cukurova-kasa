@@ -2798,6 +2798,34 @@ function setPrintPageSize(size, margin){
   const el = document.getElementById('printPageStyle');
   if (el) el.textContent = `@media print{ @page{ size:${size}; margin:${margin}; } }`;
 }
+
+// İçeriği #printArea'ya yazıp yazdırmayı tetikler — ama bunu yaparken
+// (1) sayfa içindeki görsellerin (logo vb.) tam yüklenmesini,
+// (2) tarayıcının yeni içeriği tamamen işleyip (layout+paint) hazır olmasını
+// bekler. innerHTML'den hemen sonra window.print() çağırmak bazı tarayıcı/
+// yazıcı kombinasyonlarında boş veya kopyaların birbirine karıştığı çıktıya
+// sebep oluyordu — bu bekleme adımları o sorunu çözüyor.
+async function triggerPrint(className, html, pageSize, margin){
+  const area = document.getElementById('printArea');
+  area.className = className;
+  area.innerHTML = html;
+  setPrintPageSize(pageSize, margin);
+
+  const imgs = Array.from(area.querySelectorAll('img'));
+  await Promise.all(imgs.map((img) => {
+    if (img.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+      setTimeout(resolve, 1500); // görsel hiç yüklenmezse takılıp kalmasın
+    });
+  }));
+
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  window.print();
+}
+
 function buildFisDoubleCopyHTML(rec){
   return `<div class="fis-copy">${buildFisPrintHTML(rec, 'MÜŞTERİ NÜSHASI')}</div>`
        + `<div class="fis-copy">${buildFisPrintHTML(rec, 'İŞLETME NÜSHASI')}</div>`;
@@ -2853,11 +2881,8 @@ function buildTeklifPrintHTML(rec){
   return html;
 }
 
-function printTeklifPDF(rec){
-  document.getElementById('printArea').className = 'print-a5';
-  document.getElementById('printArea').innerHTML = buildTeklifPrintHTML(rec);
-  setPrintPageSize('A5', '8mm');
-  window.print();
+async function printTeklifPDF(rec){
+  await triggerPrint('print-a5', buildTeklifPrintHTML(rec), 'A5', '8mm');
 }
 
 // Ekrandaki (henüz kaydedilmemiş olabilecek) teklifi PDF olarak indirir.
@@ -3430,10 +3455,7 @@ async function printFis(){
     toast('Fiş kaydedilemedi (yazdırma devam ediyor): ' + err.message, true);
   }
 
-  document.getElementById('printArea').className = 'print-a5';
-  document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(record);
-  setPrintPageSize('A5', '8mm');
-  window.print();
+  await triggerPrint('print-a5', buildFisDoubleCopyHTML(record), 'A5', '8mm');
 
   if (saved){
     // Fiş başarıyla kaydedildi — bir sonraki fiş için formu temizle
@@ -3487,11 +3509,8 @@ async function loadFisHistory(){
     const fisBtns = div.querySelectorAll('button');
     fisBtns[0].onclick = () => exportFisExcel(rec);
     fisBtns[1].onclick = () => sendFisWhatsApp(rec);
-    fisBtns[2].onclick = () => {
-      document.getElementById('printArea').className = 'print-a5';
-      document.getElementById('printArea').innerHTML = buildFisDoubleCopyHTML(rec);
-      setPrintPageSize('A5', '8mm');
-      window.print();
+    fisBtns[2].onclick = async () => {
+      await triggerPrint('print-a5', buildFisDoubleCopyHTML(rec), 'A5', '8mm');
     };
     fisBtns[3].onclick = async () => {
       const ok = confirm(`${escapeAttr(rec.fis_no)} numaralı fişi kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
@@ -4051,7 +4070,7 @@ async function loadUstaIstatistik(){
   });
 }
 
-function printFoy(){
+async function printFoy(){
   const r = computeSummary();
   const tipLabels = { satis:'Satışlar', tahsilat:'Tahsilatlar', odeme:'Ödemeler', masraf:'Masraflar' };
   let html = `
@@ -4091,10 +4110,7 @@ function printFoy(){
     <div><span>Bankalar Güncel Durum</span><b>${fmt(r.bankalarGuncelDurum)}</b></div>
   </div>`;
 
-  document.getElementById('printArea').className = '';
-  document.getElementById('printArea').innerHTML = html;
-  setPrintPageSize('A4', '15mm');
-  window.print();
+  await triggerPrint('', html, 'A4', '15mm');
 }
 
 async function saveFoy(){
