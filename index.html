@@ -917,7 +917,7 @@
     <div class="admin-card">
       <h3>Cari Hesap Bakiyeleri</h3>
       <p style="font-size:12.5px;color:var(--ink-dim);margin:0 0 12px;">
-        Veresiye satılan fişlerin borç bakiyesi burada birikir. Bir cariye tıklayıp ödeme alabilirsin —
+        Cari hesaba yazılan fişlerin borç bakiyesi burada birikir. Bir cariye tıklayıp ödeme alabilirsin —
         bu tamamen Föy'den bağımsız bir takip: alınan ödeme sadece buradaki bakiyeden düşer, Föy'e (kasa hareketlerine) hiç işlenmez.
       </p>
       <div id="cariHesapListe"><div class="empty">Yükleniyor…</div></div>
@@ -1752,7 +1752,7 @@ function findMethod(tip, key){
 // veya 'veresiye') okunabilir bir etikete çevirir — yazdırma çıktısında kullanılır.
 function odemeSekliLabel(key){
   if (!key) return '';
-  if (key === 'veresiye') return 'Veresiye';
+  if (key === 'veresiye') return 'Cari Hesap';
   const m = findMethod('satis', key);
   return m ? m.label : key;
 }
@@ -1771,7 +1771,7 @@ function renderFisOdemeSekliSelect(){
   const el = document.getElementById('fisOdemeSekli');
   if (!el) return;
   const opts = SECTIONS.satis.methods.map(m => `<option value="${m.key}">${escapeAttr(m.label)}</option>`);
-  opts.push('<option value="veresiye">Veresiye (Cari Hesaba Yaz)</option>');
+  opts.push('<option value="veresiye">Cari Hesap</option>');
   el.innerHTML = opts.join('');
 }
 function renderCariOdemeSekliSelect(){
@@ -1789,7 +1789,7 @@ function renderModalOdemeSekliSelect(){
   const el = document.getElementById('modalOdemeSekli');
   if (!el) return;
   const opts = SECTIONS.satis.methods.map(m => `<option value="${m.key}">${escapeAttr(m.label)}</option>`);
-  opts.push('<option value="veresiye">Veresiye (Cari Hesaba Yaz)</option>');
+  opts.push('<option value="veresiye">Cari Hesap</option>');
   el.innerHTML = opts.join('');
 }
 
@@ -1852,10 +1852,10 @@ async function routeFisTutar(cariKod, cariText, odemeSekli, tutar, fisId){
     if (odemeSekli === 'veresiye'){
       const { error } = await sb.from('cari_hesap_hareketleri').insert({
         cari_kod: cariKod || null, cari_ad: cariText || null,
-        tip: 'borc', tutar, aciklama: 'Fiş (veresiye)', fis_id: fisId || null, olusturan: currentUser
+        tip: 'borc', tutar, aciklama: 'Fiş (Cari Hesap)', fis_id: fisId || null, olusturan: currentUser
       });
       if (error) throw error;
-      toast('Tutar cari hesaba (veresiye) yazıldı ✓');
+      toast('Tutar cari hesaba yazıldı ✓');
       return;
     }
     await routeToFoy('satis', odemeSekli, cariKod, cariText, tutar);
@@ -1884,7 +1884,7 @@ async function loadCariHesapListe(){
     map[key].bakiye += (h.tip === 'borc' ? 1 : -1) * (Number(h.tutar) || 0);
   }
   const list = Object.values(map).filter((c) => Math.abs(c.bakiye) > 0.005).sort((a, b) => b.bakiye - a.bakiye);
-  if (!list.length){ el.innerHTML = '<div class="empty">Veresiye bakiyesi olan cari yok.</div>'; return; }
+  if (!list.length){ el.innerHTML = '<div class="empty">Cari hesap bakiyesi olan cari yok.</div>'; return; }
   el.innerHTML = '';
   for (const c of list){
     const row = document.createElement('div');
@@ -1932,7 +1932,7 @@ async function loadCariHesapHareketler(){
     const div = document.createElement('div');
     div.className = 'history-item';
     div.style.cursor = 'default';
-    const isim = h.tip === 'borc' ? 'Borç (Veresiye Satış)' : 'Tahsilat';
+    const isim = h.tip === 'borc' ? 'Borç (Cari Hesap Satış)' : 'Tahsilat';
     div.innerHTML = `
       <div>
         <div class="date" style="font-size:13.5px;">${isim}</div>
@@ -1955,7 +1955,7 @@ async function cariHesapOdemeAl(){
     // cari hesap bakiyesinden düşer, Föy'e (kasa hareketlerine) hiç dokunmaz.
     const { error } = await sb.from('cari_hesap_hareketleri').insert({
       cari_kod: currentCariHesapKod || null, cari_ad: currentCariHesapAd || null,
-      tip: 'tahsilat', tutar, aciklama: `Veresiye ödemesi (${odemeLabel})`, olusturan: currentUser
+      tip: 'tahsilat', tutar, aciklama: `Cari hesap ödemesi (${odemeLabel})`, olusturan: currentUser
     });
     if (error) throw error;
 
