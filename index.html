@@ -1748,6 +1748,14 @@ function removeRow(tip, key, idx){
 function findMethod(tip, key){
   return SECTIONS[tip].methods.find(m => m.key === key);
 }
+// Fiş'te saklanan ödeme şekli anahtarını (nakit, mailorder, banka kategorisi
+// veya 'veresiye') okunabilir bir etikete çevirir — yazdırma çıktısında kullanılır.
+function odemeSekliLabel(key){
+  if (!key) return '';
+  if (key === 'veresiye') return 'Veresiye';
+  const m = findMethod('satis', key);
+  return m ? m.label : key;
+}
 
 /* ============================================================
    FİŞ/CARİ HESAP → FÖY OTOMATİK İŞLEME
@@ -3057,7 +3065,7 @@ function buildFisPrintHTML(rec, copyLabel){
         <div>${tarihStr}</div>
       </div>
     </div>
-    <div style="font-size:11.5px;font-weight:700;margin-bottom:8px;">${rec.cari_kod ? `<span style="color:#666;font-weight:600;">[${escapeAttr(rec.cari_kod)}]</span> ` : ''}${escapeAttr(rec.cari || '—')}</div>
+    <div style="font-size:11.5px;font-weight:700;margin-bottom:8px;">${rec.cari_kod ? `<span style="color:#666;font-weight:600;">[${escapeAttr(rec.cari_kod)}]</span> ` : ''}${escapeAttr(rec.cari || '—')}${rec.odeme_sekli ? ` <span style="color:#666;font-weight:600;">— ${escapeAttr(odemeSekliLabel(rec.odeme_sekli))}</span>` : ''}</div>
     <table><thead><tr>
       <th>ÜRÜN KODU</th><th>ÜRÜN ADI</th><th>AD</th><th>FİYAT (KDV DAHİL)</th><th>İSK1</th><th>İSK2</th><th>KDV</th><th>TUTAR</th>
     </tr></thead><tbody>
@@ -3721,6 +3729,7 @@ async function printFis(){
       fis_no: editingFisNo, cari, cari_kod: cariKod,
       urunler: fisRows,
       ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
+      odeme_sekli: odemeSekli,
       created_at: new Date().toISOString()
     };
     try{
@@ -3762,6 +3771,7 @@ async function printFis(){
     ara_toplam: t.araToplam,
     kdv_toplam: t.kdvToplam,
     genel_toplam: t.genelToplam,
+    odeme_sekli: odemeSekli,
     created_at: new Date().toISOString()
   };
 
