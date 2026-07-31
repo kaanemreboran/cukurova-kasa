@@ -1729,18 +1729,14 @@ function buildMethodBody(tip, method, extraAuto){
     });
 
     if (isOdemeMailorderAuto){
-      const autoTr = document.createElement('tr');
-      autoTr.className = 'row-line';
-      autoTr.style.cssText = 'opacity:.75;font-style:italic;';
-      autoTr.innerHTML = `
-        <td colspan="2" style="color:var(--ink-dim);">🔄 Bayiye Direkt (Satış/Tahsilat'tan otomatik — düzenlenemez)</td>
-        <td class="tutar-col"><span id="odeme-mailorder-auto-tutar" style="font-variant-numeric:tabular-nums;">${fmt(extraAuto || 0)}</span></td>
-        <td colspan="3"></td>
-      `;
-      tbody.appendChild(autoTr);
+      const autoTbody = document.createElement('tbody');
+      autoTbody.id = 'odeme-mailorder-auto-body';
+      autoTbody.innerHTML = buildOdemeMailorderAutoRowsHTML();
+      table.appendChild(tbody);
+      table.appendChild(autoTbody);
+    } else {
+      table.appendChild(tbody);
     }
-
-    table.appendChild(tbody);
     body.appendChild(table);
   }
 
@@ -2399,6 +2395,35 @@ function updateCellBool(tip, key, idx, field, checked){
     refreshOdemeMailorderAutoDisplay();
   }
 }
+// Satış ve Tahsilat'ın Mail Order'ında "Bayiye Direkt" işaretlenmiş satırları
+// tek tek toplar — her biri Ödeme -> Mail Order'da kendi satırı olarak görünecek.
+function getBayiyeDirektKaynakSatirlari(){
+  const list = [];
+  for (const tip of ['satis','tahsilat']){
+    for (const row of (state[tip].mailorder || [])){
+      if (row.bayiye_direkt && Number(row.tutar)){
+        list.push({ kod: row.kod, ad: row.ad, tutar: row.tutar, bayi_adi: row.bayi_adi });
+      }
+    }
+  }
+  return list;
+}
+// Bu satırları, normal (elle girilmiş) bir satırla aynı görünümde ama
+// düzenlenemez (disabled) halde HTML olarak üretir.
+function buildOdemeMailorderAutoRowsHTML(){
+  const items = getBayiyeDirektKaynakSatirlari();
+  return items.map((item) => `
+    <tr class="row-line">
+      <td><input type="text" value="${escapeAttr(item.kod)}" disabled></td>
+      <td><input type="text" value="${escapeAttr(item.ad)}" disabled></td>
+      <td class="tutar-col"><input type="number" value="${plainNum(item.tutar)}" disabled></td>
+      <td style="text-align:center;"><input type="checkbox" checked disabled style="width:16px;height:16px;"></td>
+      <td><input type="text" value="${escapeAttr(item.bayi_adi)}" disabled></td>
+      <td class="action-col" title="Satış/Tahsilat'tan otomatik — silinemez">🔄</td>
+    </tr>
+  `).join('');
+}
+
 function updateCardTotal(tip, key){
   const total = sumRows(tip, key);
   const el = document.getElementById(`method-total-${tip}-${key}`);
@@ -2416,8 +2441,8 @@ function updateCardTotal(tip, key){
 function refreshOdemeMailorderAutoDisplay(){
   const r = computeSummary();
   const extraAuto = r.bayiyeAktarilanToplam || 0;
-  const autoTutarEl = document.getElementById('odeme-mailorder-auto-tutar');
-  if (autoTutarEl) autoTutarEl.textContent = fmt(extraAuto);
+  const autoBody = document.getElementById('odeme-mailorder-auto-body');
+  if (autoBody) autoBody.innerHTML = buildOdemeMailorderAutoRowsHTML();
   const headerEl = document.getElementById('method-total-odeme-mailorder');
   if (headerEl){
     const total = sumRows('odeme', 'mailorder') + extraAuto;
@@ -2445,6 +2470,12 @@ function escapeAttr(v){
 }
 function fmt(n){
   return (Number(n)||0).toLocaleString('tr-TR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+}
+// Tutar input'larının gösterdiği düz sayı biçimi (virgül/nokta ayracı yok) —
+// otomatik bayiye-direkt satırının diğer TUTAR hücreleriyle aynı görünmesi için.
+function plainNum(n){
+  const v = Number(n) || 0;
+  return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
 }
 
 /* ============================================================
