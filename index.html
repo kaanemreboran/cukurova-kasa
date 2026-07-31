@@ -706,7 +706,7 @@
         <button class="btn ghost" onclick="clearFis()">Temizle</button>
         <button class="btn ghost" onclick="downloadFisExcel()">📊 Excel İndir</button>
         <button class="btn ghost" onclick="sendCurrentFisWhatsApp()">💬 WhatsApp</button>
-        <button class="btn" onclick="printFis()">🖨️ Fişi Kaydet ve Yazdır</button>
+        <button class="btn" id="fisKaydetBtn" onclick="printFis()">🖨️ Fişi Kaydet ve Yazdır</button>
       </div>
 
       <div class="card">
@@ -2714,6 +2714,8 @@ function updateDeleteBtnState(){
    FİŞ (SİPARİŞ FİŞİ) OLUŞTURUCU
    ============================================================ */
 let fisRows = [];
+let editingFisId = null;  // null: yeni fiş; dolu: bu id'li fiş güncelleniyor
+let editingFisNo = null;  // düzenlenen fişin orijinal fiş numarası (değişmez)
 function newFisRow(){
   return { kod:'', ad:'', adet:1, fiyat:0, isk1:0, isk2:0, kdv:20, _id: Math.random().toString(36).slice(2) };
 }
@@ -2990,13 +2992,38 @@ function hideUrunDropdownDelayed(idx, field){
   hideDropdownDelayed(`fis-${field}-dropdown-${idx}`);
 }
 
+function updateFisKaydetBtnLabel(){
+  const btn = document.getElementById('fisKaydetBtn');
+  if (btn) btn.textContent = editingFisId ? '✏️ Fişi Güncelle' : '🖨️ Fişi Kaydet ve Yazdır';
+}
+
 function clearFis(){
   const ok = fisRows.length ? confirm('Fişi temizlemek istediğine emin misin?') : true;
   if (!ok) return;
+  editingFisId = null;
+  editingFisNo = null;
+  updateFisKaydetBtnLabel();
   document.getElementById('fisCariKod').value = '';
   document.getElementById('fisCari').value = '';
   fisRows = [];
   renderFisRows();
+}
+
+// Fiş Geçmişi'ndeki kayıtlı bir fişi düzenlemek için forma yükler.
+function editFisRecord(rec){
+  editingFisId = rec.id;
+  editingFisNo = rec.fis_no;
+  document.getElementById('fisCariKod').value = rec.cari_kod || '';
+  document.getElementById('fisCari').value = rec.cari || '';
+  fisRows = (rec.urunler || []).map(r => ({ ...r, _id: Math.random().toString(36).slice(2) }));
+  if (!fisRows.length) fisRows.push(newFisRow());
+  switchSide('fis');
+  switchFisSub('yeni');
+  renderFisRows();
+  const odemeEl = document.getElementById('fisOdemeSekli');
+  if (odemeEl) odemeEl.value = rec.odeme_sekli || 'nakit';
+  updateFisKaydetBtnLabel();
+  toast('Fiş düzenleme için yüklendi — değiştirip "Fişi Güncelle"ye bas ✓');
 }
 
 async function getNextFisNo(){
@@ -3684,6 +3711,49 @@ async function printFis(){
   const cari = document.getElementById('fisCari').value.trim();
   const odemeSekli = document.getElementById('fisOdemeSekli')?.value || 'nakit';
   const t = computeFisTotals();
+
+  // ---- DÜZENLEME MODU: var olan fişi güncelle, yeni fiş numarası alma,
+  // Föy/Cari Hesap'a TEKRAR otomatik işleme yapma (ilk kayıtta zaten işlendi —
+  // tekrar işlersek aynı para iki kere sayılır). Tutar değiştiyse Föy/Cari
+  // Hesap'ı elle düzeltmen gerekiyor.
+  if (editingFisId){
+    const record = {
+      fis_no: editingFisNo, cari, cari_kod: cariKod,
+      urunler: fisRows,
+      ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
+      created_at: new Date().toISOString()
+    };
+    try{
+      const { error } = await sb.from('fisler').update({
+        cari: cari || null, cari_kod: cariKod || null,
+        urunler: fisRows,
+        ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
+        odeme_sekli: odemeSekli
+      }).eq('id', editingFisId);
+      if (error) throw error;
+      toast('Fiş güncellendi ✓ (Föy/Cari Hesap otomatik güncellenmedi — tutar değiştiyse elle kontrol et)');
+      if (cari || cariKod) saveCariIfNew(cari, cariKod);
+      for (const row of fisRows){
+        if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat, row.oem);
+      }
+    } catch(err){
+      toast('Fiş güncellenemedi: ' + err.message, true);
+      return;
+    }
+
+    await triggerPrint('print-a5', buildFisPrintHTML(record), 'A5', '8mm');
+
+    editingFisId = null;
+    editingFisNo = null;
+    updateFisKaydetBtnLabel();
+    document.getElementById('fisCariKod').value = '';
+    document.getElementById('fisCari').value = '';
+    fisRows = [];
+    renderFisRows();
+    return;
+  }
+
+  // ---- YENİ FİŞ ----
   const fis_no = await getNextFisNo();
 
   const record = {
@@ -3759,6 +3829,7 @@ async function loadFisHistory(){
         <div class="nums">
           <div><span>Genel Toplam</span>${fmt(rec.genel_toplam)}</div>
         </div>
+        <button class="btn ghost" style="padding:6px 12px;font-size:12px;">✏️ Düzenle</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">📊 Excel</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">💬 WhatsApp</button>
         <button class="btn ghost" style="padding:6px 12px;font-size:12px;">🖨️ Yazdır</button>
@@ -3766,12 +3837,13 @@ async function loadFisHistory(){
       </div>
     `;
     const fisBtns = div.querySelectorAll('button');
-    fisBtns[0].onclick = () => exportFisExcel(rec);
-    fisBtns[1].onclick = () => sendFisWhatsApp(rec);
-    fisBtns[2].onclick = async () => {
+    fisBtns[0].onclick = () => editFisRecord(rec);
+    fisBtns[1].onclick = () => exportFisExcel(rec);
+    fisBtns[2].onclick = () => sendFisWhatsApp(rec);
+    fisBtns[3].onclick = async () => {
       await triggerPrint('print-a5', buildFisPrintHTML(rec), 'A5', '8mm');
     };
-    fisBtns[3].onclick = async () => {
+    fisBtns[4].onclick = async () => {
       const ok = confirm(`${escapeAttr(rec.fis_no)} numaralı fişi kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
       if (!ok) return;
       const { error: delErr } = await sb.from('fisler').delete().eq('id', rec.id);
