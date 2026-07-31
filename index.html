@@ -593,6 +593,7 @@
     <div class="side-label" style="margin-top:6px;">Diğer</div>
     <button id="sideBtnFis" onclick="switchSide('fis')"><span class="side-ico">🧾</span> Fiş</button>
     <button id="sideBtnTeklif" onclick="switchSide('teklif')"><span class="side-ico">📝</span> Teklif</button>
+    <button id="sideBtnCariHesap" onclick="switchSide('carihesap')"><span class="side-ico">💳</span> Cari Hesap</button>
     <button id="sideBtnKayitlar" onclick="switchSide('kayitlar')"><span class="side-ico">📇</span> Cari &amp; Ürün</button>
     <button id="sideBtnIstatistik" onclick="switchSide('istatistik')"><span class="side-ico">📊</span> İstatistik</button>
     <button id="sideBtnAdmin" onclick="switchSide('admin')"><span class="side-ico">⚙️</span> Admin</button>
@@ -603,6 +604,7 @@
       <button id="bottomBtnFoy" class="active" onclick="switchSide('foy')"><span class="bn-ico">📋</span>Föy</button>
       <button id="bottomBtnFis" onclick="switchSide('fis')"><span class="bn-ico">🧾</span>Fiş</button>
       <button id="bottomBtnTeklif" onclick="switchSide('teklif')"><span class="bn-ico">📝</span>Teklif</button>
+      <button id="bottomBtnCariHesap" onclick="switchSide('carihesap')"><span class="bn-ico">💳</span>Cari H.</button>
       <button id="bottomBtnKayitlar" onclick="switchSide('kayitlar')"><span class="bn-ico">📇</span>Cari</button>
       <button id="bottomBtnIstatistik" onclick="switchSide('istatistik')"><span class="bn-ico">📊</span>İstat.</button>
       <button id="bottomBtnAdmin" onclick="switchSide('admin')"><span class="bn-ico">⚙️</span>Admin</button>
@@ -698,6 +700,8 @@
           onfocus="showCariDropdown(this.value, 'fisCari', 'fisCariDropdown', 'fisCariKod')"
           onblur="hideDropdownDelayed('fisCariDropdown')">
         <div class="autocomplete-list hidden" id="fisCariDropdown"></div>
+        <label>Ödeme Şekli</label>
+        <select id="fisOdemeSekli" style="width:180px;"></select>
         <div class="spacer"></div>
         <button class="btn ghost" onclick="clearFis()">Temizle</button>
         <button class="btn ghost" onclick="downloadFisExcel()">📊 Excel İndir</button>
@@ -764,6 +768,12 @@
       <button id="teklifSubBtnYeni" class="active" onclick="switchTeklifSub('yeni')">Teklif</button>
       <button id="teklifSubBtnGecmis" onclick="switchTeklifSub('gecmis')">Teklif Geçmişi</button>
     </nav>
+
+    <div class="toolbar" style="margin-bottom:14px;">
+      <label>"Siparişe Gönder" ile fişe dönüşünce Ödeme Şekli</label>
+      <select id="teklifOdemeSekli" style="width:200px;"></select>
+      <div class="spacer"></div>
+    </div>
 
     <div id="teklifSubYeni">
       <div class="card" style="margin-bottom:16px;">
@@ -905,6 +915,31 @@
         </div>
         <div id="istUstaListe"><div class="empty">Yükleniyor…</div></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ===================== CARİ HESAP (VERESİYE) ===================== -->
+  <section id="tabCariHesap" class="hidden">
+    <div class="admin-card">
+      <h3>Cari Hesap Bakiyeleri</h3>
+      <p style="font-size:12.5px;color:var(--ink-dim);margin:0 0 12px;">
+        Veresiye satılan fişlerin borç bakiyesi burada birikir. Bir cariye tıklayıp ödeme alabilirsin —
+        alınan ödeme hem buradan düşer hem de bugünün Föy'üne tahsilat olarak otomatik işlenir.
+      </p>
+      <div id="cariHesapListe"><div class="empty">Yükleniyor…</div></div>
+    </div>
+    <div class="admin-card hidden" id="cariHesapDetayCard">
+      <h3 id="cariHesapDetayBaslik">—</h3>
+      <div class="toolbar" style="margin-bottom:14px;">
+        <label>Tutar</label>
+        <input type="number" step="0.01" id="cariOdemeTutar" style="width:130px;">
+        <label>Ödeme Şekli</label>
+        <select id="cariOdemeSekli" style="width:180px;"></select>
+        <button class="btn" onclick="cariHesapOdemeAl()">Ödeme Al</button>
+        <div class="spacer"></div>
+        <button class="btn ghost" onclick="closeCariHesapDetay()">Kapat</button>
+      </div>
+      <div id="cariHesapHareketler"><div class="empty">Yükleniyor…</div></div>
     </div>
   </section>
 
@@ -1321,6 +1356,7 @@ function switchSide(side){
   document.getElementById('sideBtnFoy').classList.toggle('active', side === 'foy');
   document.getElementById('sideBtnFis').classList.toggle('active', side === 'fis');
   document.getElementById('sideBtnTeklif').classList.toggle('active', side === 'teklif');
+  document.getElementById('sideBtnCariHesap').classList.toggle('active', side === 'carihesap');
   document.getElementById('sideBtnKayitlar').classList.toggle('active', side === 'kayitlar');
   document.getElementById('sideBtnIstatistik').classList.toggle('active', side === 'istatistik');
   document.getElementById('sideBtnAdmin').classList.toggle('active', side === 'admin');
@@ -1328,6 +1364,7 @@ function switchSide(side){
   document.getElementById('bottomBtnFoy').classList.toggle('active', side === 'foy');
   document.getElementById('bottomBtnFis').classList.toggle('active', side === 'fis');
   document.getElementById('bottomBtnTeklif').classList.toggle('active', side === 'teklif');
+  document.getElementById('bottomBtnCariHesap').classList.toggle('active', side === 'carihesap');
   document.getElementById('bottomBtnKayitlar').classList.toggle('active', side === 'kayitlar');
   document.getElementById('bottomBtnIstatistik').classList.toggle('active', side === 'istatistik');
   document.getElementById('bottomBtnAdmin').classList.toggle('active', side === 'admin');
@@ -1335,6 +1372,7 @@ function switchSide(side){
   document.getElementById('foySubTabs').classList.toggle('hidden', side !== 'foy');
   document.getElementById('tabFis').classList.toggle('hidden', side !== 'fis');
   document.getElementById('tabTeklif').classList.toggle('hidden', side !== 'teklif');
+  document.getElementById('tabCariHesap').classList.toggle('hidden', side !== 'carihesap');
   document.getElementById('tabKayitlar').classList.toggle('hidden', side !== 'kayitlar');
   document.getElementById('tabIstatistik').classList.toggle('hidden', side !== 'istatistik');
   document.getElementById('tabAdmin').classList.toggle('hidden', side !== 'admin');
@@ -1353,11 +1391,17 @@ function switchSide(side){
     if (!fisRows.length){ fisRows.push(newFisRow()); renderFisRows(); }
     if (!cariListeLoaded) loadCariListe();
     if (!urunListeLoaded) loadUrunListe();
+    renderFisOdemeSekliSelect();
   }
   if (side === 'teklif'){
     if (!teklifRows.length){ teklifRows.push(newTeklifRow()); renderTeklifRows(); }
     if (!cariListeLoaded) loadCariListe();
     if (!urunListeLoaded) loadUrunListe();
+    renderTeklifOdemeSekliSelect();
+  }
+  if (side === 'carihesap'){
+    closeCariHesapDetay();
+    loadCariHesapListe();
   }
   if (side === 'istatistik') initIstatistik();
 }
@@ -1700,6 +1744,189 @@ function removeRow(tip, key, idx){
 }
 function findMethod(tip, key){
   return SECTIONS[tip].methods.find(m => m.key === key);
+}
+
+/* ============================================================
+   FİŞ/CARİ HESAP → FÖY OTOMATİK İŞLEME
+   Bir fiş kaydedilince (veya cari hesaptan ödeme alınınca), tutarı elle
+   Föy'e girmeye gerek kalmadan otomatik olarak ilgili güne işler.
+   Veresiye seçilirse Föy'e hiç dokunulmaz, cari_hesap_hareketleri'ne
+   borç olarak yazılır.
+   ÖNEMLİ: Bu sadece BUNDAN SONRA kesilecek fişler için çalışır — geçmiş
+   fişlerin tutarları zaten elle Föy'e girilmişti, geriye dönük işlenirse
+   aynı para iki kere sayılır.
+   ============================================================ */
+function renderFisOdemeSekliSelect(){
+  const el = document.getElementById('fisOdemeSekli');
+  if (!el) return;
+  const opts = SECTIONS.satis.methods.map(m => `<option value="${m.key}">${escapeAttr(m.label)}</option>`);
+  opts.push('<option value="veresiye">Veresiye (Cari Hesaba Yaz)</option>');
+  el.innerHTML = opts.join('');
+}
+function renderTeklifOdemeSekliSelect(){
+  const el = document.getElementById('teklifOdemeSekli');
+  if (!el) return;
+  const opts = SECTIONS.satis.methods.map(m => `<option value="${m.key}">${escapeAttr(m.label)}</option>`);
+  opts.push('<option value="veresiye">Veresiye (Cari Hesaba Yaz)</option>');
+  el.innerHTML = opts.join('');
+}
+function renderCariOdemeSekliSelect(){
+  const el = document.getElementById('cariOdemeSekli');
+  if (!el) return;
+  el.innerHTML = SECTIONS.tahsilat.methods.map(m => `<option value="${m.key}">${escapeAttr(m.label)}</option>`).join('');
+}
+
+async function ensureTodayFoyId(){
+  const tarih = todayStr();
+  const { data: foy, error } = await sb.from('kasa_foyleri').select('id').eq('tarih', tarih).maybeSingle();
+  if (error) throw error;
+  if (foy) return foy.id;
+  const { data: newFoy, error: insErr } = await sb.from('kasa_foyleri')
+    .insert({ tarih, durum: 'acik', nakit_devir: 0, banka_devirleri: {}, olusturan: currentUser })
+    .select().single();
+  if (insErr) throw insErr;
+  return newFoy.id;
+}
+
+async function routeToFoy(islemTipi, odemeSekli, kod, ad, tutar){
+  if (!tutar) return;
+  const foyId2 = await ensureTodayFoyId();
+  const { count } = await sb.from('kasa_hareketleri').select('id', { count: 'exact', head: true })
+    .eq('foy_id', foyId2).eq('islem_tipi', islemTipi).eq('odeme_yontemi', odemeSekli);
+  const method = findMethod(islemTipi, odemeSekli);
+  const hesabaGecen = (method && method.hesabaGecen && method.commission) ? method.commission(tutar) : null;
+  const { error } = await sb.from('kasa_hareketleri').insert({
+    foy_id: foyId2, islem_tipi: islemTipi, odeme_yontemi: odemeSekli,
+    sira: (count || 0) + 1, kod: kod || null, ad: ad || null, tutar,
+    hesaba_gecen: hesabaGecen, bayiye_direkt: false, bayi_adi: null
+  });
+  if (error) throw error;
+
+  // Bugünün föyü şu an ekranda açıksa, canlı güncelle.
+  if (state && state.tarih === todayStr()){
+    loadFoyForDate(true);
+  }
+}
+
+async function routeFisTutar(cariKod, cariText, odemeSekli, tutar, fisId){
+  if (!tutar) return;
+  try{
+    if (odemeSekli === 'veresiye'){
+      const { error } = await sb.from('cari_hesap_hareketleri').insert({
+        cari_kod: cariKod || null, cari_ad: cariText || null,
+        tip: 'borc', tutar, aciklama: 'Fiş (veresiye)', fis_id: fisId || null, olusturan: currentUser
+      });
+      if (error) throw error;
+      toast('Tutar cari hesaba (veresiye) yazıldı ✓');
+      return;
+    }
+    await routeToFoy('satis', odemeSekli, cariKod, cariText, tutar);
+    toast('Tutar bugünün föyüne otomatik işlendi ✓');
+  } catch(err){
+    toast('Föy/Cari hesaba otomatik işleme hatası: ' + err.message, true);
+  }
+}
+
+/* ============================================================
+   CARİ HESAP (VERESİYE TAKİBİ)
+   ============================================================ */
+let currentCariHesapKod = null;
+let currentCariHesapAd = null;
+
+async function loadCariHesapListe(){
+  const el = document.getElementById('cariHesapListe');
+  if (!el) return;
+  el.innerHTML = '<div class="empty">Yükleniyor…</div>';
+  const { data, error } = await sb.from('cari_hesap_hareketleri').select('cari_kod, cari_ad, tip, tutar');
+  if (error){ el.innerHTML = '<div class="empty">Hata: ' + error.message + '</div>'; return; }
+  const map = {};
+  for (const h of (data || [])){
+    const key = (h.cari_kod || '') + '|' + (h.cari_ad || '');
+    if (!map[key]) map[key] = { kod: h.cari_kod, ad: h.cari_ad, bakiye: 0 };
+    map[key].bakiye += (h.tip === 'borc' ? 1 : -1) * (Number(h.tutar) || 0);
+  }
+  const list = Object.values(map).filter((c) => Math.abs(c.bakiye) > 0.005).sort((a, b) => b.bakiye - a.bakiye);
+  if (!list.length){ el.innerHTML = '<div class="empty">Veresiye bakiyesi olan cari yok.</div>'; return; }
+  el.innerHTML = '';
+  for (const c of list){
+    const row = document.createElement('div');
+    row.className = 'history-item';
+    row.innerHTML = `
+      <div>
+        <div class="date" style="font-size:14px;">${escapeAttr(c.ad || c.kod || 'Cari')}</div>
+        <div class="meta">${c.kod ? 'Kod: ' + escapeAttr(c.kod) : ''}</div>
+      </div>
+      <div class="history-actions">
+        <div class="nums"><div><span>Bakiye</span><b style="color:${c.bakiye > 0 ? 'var(--red)' : 'var(--green)'}">${fmt(c.bakiye)}</b></div></div>
+      </div>
+    `;
+    row.onclick = () => openCariHesapDetay(c.kod, c.ad);
+    el.appendChild(row);
+  }
+}
+
+async function openCariHesapDetay(kod, ad){
+  currentCariHesapKod = kod;
+  currentCariHesapAd = ad;
+  document.getElementById('cariHesapDetayCard').classList.remove('hidden');
+  document.getElementById('cariHesapDetayBaslik').textContent = ad || kod || 'Cari';
+  renderCariOdemeSekliSelect();
+  document.getElementById('cariOdemeTutar').value = '';
+  await loadCariHesapHareketler();
+}
+function closeCariHesapDetay(){
+  document.getElementById('cariHesapDetayCard').classList.add('hidden');
+  currentCariHesapKod = null;
+  currentCariHesapAd = null;
+}
+
+async function loadCariHesapHareketler(){
+  const el = document.getElementById('cariHesapHareketler');
+  if (!el) return;
+  el.innerHTML = '<div class="empty">Yükleniyor…</div>';
+  let q = sb.from('cari_hesap_hareketleri').select('*').order('created_at', { ascending: false });
+  q = currentCariHesapKod ? q.eq('cari_kod', currentCariHesapKod) : q.eq('cari_ad', currentCariHesapAd);
+  const { data, error } = await q;
+  if (error){ el.innerHTML = '<div class="empty">Hata: ' + error.message + '</div>'; return; }
+  if (!data || !data.length){ el.innerHTML = '<div class="empty">Hareket yok.</div>'; return; }
+  el.innerHTML = '';
+  for (const h of data){
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    div.style.cursor = 'default';
+    const isim = h.tip === 'borc' ? 'Borç (Veresiye Satış)' : 'Tahsilat';
+    div.innerHTML = `
+      <div>
+        <div class="date" style="font-size:13.5px;">${isim}</div>
+        <div class="meta">${new Date(h.created_at).toLocaleString('tr-TR')} · ${escapeAttr(h.aciklama || '')}</div>
+      </div>
+      <div class="history-actions"><b style="color:${h.tip === 'borc' ? 'var(--red)' : 'var(--green)'}">${h.tip === 'borc' ? '+' : '-'}${fmt(h.tutar)}</b></div>
+    `;
+    el.appendChild(div);
+  }
+}
+
+async function cariHesapOdemeAl(){
+  const tutar = Number(document.getElementById('cariOdemeTutar').value) || 0;
+  if (tutar <= 0){ toast('Geçerli bir tutar gir', true); return; }
+  const odemeSekli = document.getElementById('cariOdemeSekli').value;
+  try{
+    const { error } = await sb.from('cari_hesap_hareketleri').insert({
+      cari_kod: currentCariHesapKod || null, cari_ad: currentCariHesapAd || null,
+      tip: 'tahsilat', tutar, aciklama: 'Veresiye ödemesi', olusturan: currentUser
+    });
+    if (error) throw error;
+
+    // Alınan ödeme gerçek para olarak kasaya girdiği için bugünün föyüne de işlenir.
+    await routeToFoy('tahsilat', odemeSekli, currentCariHesapKod, currentCariHesapAd, tutar);
+
+    toast('Ödeme alındı ✓');
+    document.getElementById('cariOdemeTutar').value = '';
+    await loadCariHesapHareketler();
+    await loadCariHesapListe();
+  } catch(err){
+    toast('Ödeme kaydedilemedi: ' + err.message, true);
+  }
 }
 
 /* ============================================================
@@ -3425,6 +3652,7 @@ async function printFis(){
   if (!fisRows.length){ toast('Fişte ürün yok', true); return; }
   const cariKod = document.getElementById('fisCariKod').value.trim();
   const cari = document.getElementById('fisCari').value.trim();
+  const odemeSekli = document.getElementById('fisOdemeSekli')?.value || 'nakit';
   const t = computeFisTotals();
   const fis_no = await getNextFisNo();
 
@@ -3439,18 +3667,19 @@ async function printFis(){
 
   let saved = false;
   try{
-    const { error } = await sb.from('fisler').insert({
+    const { data: insData, error } = await sb.from('fisler').insert({
       fis_no, cari: cari || null, cari_kod: cariKod || null,
       urunler: fisRows,
       ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
-      olusturan: currentUser
-    });
+      olusturan: currentUser, odeme_sekli: odemeSekli
+    }).select().single();
     if (error) throw error;
     saved = true;
     if (cari || cariKod) saveCariIfNew(cari, cariKod); // sonraki fişte tek tıkla seçilebilsin diye kaydet
     for (const row of fisRows){
-      if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat);
+      if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat, row.oem);
     }
+    await routeFisTutar(cariKod, cari, odemeSekli, t.genelToplam, insData?.id);
   } catch(err){
     toast('Fiş kaydedilemedi (yazdırma devam ediyor): ' + err.message, true);
   }
@@ -3727,18 +3956,20 @@ async function autoSaveTeklifAsFis(cariKod, cariText, rows){
   if (!rows.length){ toast('Teklifte ürün yok', true); return false; }
   const t = computeRowsTotals(rows);
   const fis_no = await getNextFisNo();
+  const odemeSekli = document.getElementById('teklifOdemeSekli')?.value || 'nakit';
   try{
-    const { error } = await sb.from('fisler').insert({
+    const { data: insData, error } = await sb.from('fisler').insert({
       fis_no, cari: cariText || null, cari_kod: cariKod || null,
       urunler: rows,
       ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
-      olusturan: currentUser
-    });
+      olusturan: currentUser, odeme_sekli: odemeSekli
+    }).select().single();
     if (error) throw error;
     if (cariText || cariKod) saveCariIfNew(cariText, cariKod);
     for (const row of rows){
       if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat, row.oem);
     }
+    await routeFisTutar(cariKod, cariText, odemeSekli, t.genelToplam, insData?.id);
     toast(`Teklif otomatik fişe dönüştürüldü ✓ (${fis_no})`);
     return true;
   } catch(err){
