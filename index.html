@@ -3455,7 +3455,7 @@ async function printFis(){
     toast('Fiş kaydedilemedi (yazdırma devam ediyor): ' + err.message, true);
   }
 
-  await triggerPrint('print-a5', buildFisDoubleCopyHTML(record), 'A5', '8mm');
+  await triggerPrint('print-a5', buildFisPrintHTML(record), 'A5', '8mm');
 
   if (saved){
     // Fiş başarıyla kaydedildi — bir sonraki fiş için formu temizle
@@ -3510,7 +3510,7 @@ async function loadFisHistory(){
     fisBtns[0].onclick = () => exportFisExcel(rec);
     fisBtns[1].onclick = () => sendFisWhatsApp(rec);
     fisBtns[2].onclick = async () => {
-      await triggerPrint('print-a5', buildFisDoubleCopyHTML(rec), 'A5', '8mm');
+      await triggerPrint('print-a5', buildFisPrintHTML(rec), 'A5', '8mm');
     };
     fisBtns[3].onclick = async () => {
       const ok = confirm(`${escapeAttr(rec.fis_no)} numaralı fişi kalıcı olarak silmek istediğine emin misin? Bu işlem geri alınamaz.`);
