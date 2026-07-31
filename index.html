@@ -769,12 +769,6 @@
       <button id="teklifSubBtnGecmis" onclick="switchTeklifSub('gecmis')">Teklif Geçmişi</button>
     </nav>
 
-    <div class="toolbar" style="margin-bottom:14px;">
-      <label>"Siparişe Gönder" ile fişe dönüşünce Ödeme Şekli</label>
-      <select id="teklifOdemeSekli" style="width:200px;"></select>
-      <div class="spacer"></div>
-    </div>
-
     <div id="teklifSubYeni">
       <div class="card" style="margin-bottom:16px;">
         <div class="card-head"><h3>Müşteri / Araç Bilgileri</h3></div>
@@ -1052,6 +1046,16 @@
   </section>
 
 </main>
+  </div>
+</div>
+
+<div id="odemeSekliOverlay" class="login-overlay hidden" onclick="if(event.target===this) closeOdemeSekliModal();">
+  <div class="login-box">
+    <h2>Hangi Satış İle?</h2>
+    <p>Bu teklif fişe dönüşecek — parayı nereye işleyeyim?</p>
+    <select id="modalOdemeSekli" style="width:100%;margin-bottom:14px;"></select>
+    <button class="btn" onclick="confirmOdemeSekliModal()">Onayla ve Fişe Dönüştür</button>
+    <button class="btn ghost" style="margin-top:8px;" onclick="closeOdemeSekliModal()">Vazgeç</button>
   </div>
 </div>
 
@@ -1397,7 +1401,6 @@ function switchSide(side){
     if (!teklifRows.length){ teklifRows.push(newTeklifRow()); renderTeklifRows(); }
     if (!cariListeLoaded) loadCariListe();
     if (!urunListeLoaded) loadUrunListe();
-    renderTeklifOdemeSekliSelect();
   }
   if (side === 'carihesap'){
     closeCariHesapDetay();
@@ -1763,17 +1766,44 @@ function renderFisOdemeSekliSelect(){
   opts.push('<option value="veresiye">Veresiye (Cari Hesaba Yaz)</option>');
   el.innerHTML = opts.join('');
 }
-function renderTeklifOdemeSekliSelect(){
-  const el = document.getElementById('teklifOdemeSekli');
+function renderCariOdemeSekliSelect(){
+  const el = document.getElementById('cariOdemeSekli');
+  if (!el) return;
+  el.innerHTML = SECTIONS.tahsilat.methods.map(m => `<option value="${m.key}">${escapeAttr(m.label)}</option>`).join('');
+}
+
+/* ============================================================
+   TEKLİF → SİPARİŞE GÖNDER: hangi ödeme şekliyle fişe dönüşeceğini soran modal
+   ============================================================ */
+let pendingTeklifConvert = null; // { cariKod, cariText, rows }
+
+function renderModalOdemeSekliSelect(){
+  const el = document.getElementById('modalOdemeSekli');
   if (!el) return;
   const opts = SECTIONS.satis.methods.map(m => `<option value="${m.key}">${escapeAttr(m.label)}</option>`);
   opts.push('<option value="veresiye">Veresiye (Cari Hesaba Yaz)</option>');
   el.innerHTML = opts.join('');
 }
-function renderCariOdemeSekliSelect(){
-  const el = document.getElementById('cariOdemeSekli');
-  if (!el) return;
-  el.innerHTML = SECTIONS.tahsilat.methods.map(m => `<option value="${m.key}">${escapeAttr(m.label)}</option>`).join('');
+
+function openOdemeSekliModal(cariKod, cariText, rows){
+  pendingTeklifConvert = { cariKod, cariText, rows };
+  renderModalOdemeSekliSelect();
+  document.getElementById('odemeSekliOverlay').classList.remove('hidden');
+}
+function closeOdemeSekliModal(){
+  document.getElementById('odemeSekliOverlay').classList.add('hidden');
+  pendingTeklifConvert = null;
+}
+async function confirmOdemeSekliModal(){
+  if (!pendingTeklifConvert) return;
+  const odemeSekli = document.getElementById('modalOdemeSekli').value;
+  const { cariKod, cariText, rows } = pendingTeklifConvert;
+  closeOdemeSekliModal();
+  const ok = await autoSaveTeklifAsFis(cariKod, cariText, rows, odemeSekli);
+  if (ok){
+    switchSide('fis');
+    switchFisSub('gecmis');
+  }
 }
 
 async function ensureTodayFoyId(){
@@ -3952,11 +3982,11 @@ async function saveTeklif(){
 
 // Ekrandaki (henüz kaydedilmemiş olabilecek) teklifi Fiş ekranına aktarır.
 // Teklif satırlarını doğrudan (elle onay istemeden) bir fiş olarak Supabase'e kaydeder.
-async function autoSaveTeklifAsFis(cariKod, cariText, rows){
+async function autoSaveTeklifAsFis(cariKod, cariText, rows, odemeSekli){
   if (!rows.length){ toast('Teklifte ürün yok', true); return false; }
   const t = computeRowsTotals(rows);
   const fis_no = await getNextFisNo();
-  const odemeSekli = document.getElementById('teklifOdemeSekli')?.value || 'nakit';
+  odemeSekli = odemeSekli || 'nakit';
   try{
     const { data: insData, error } = await sb.from('fisler').insert({
       fis_no, cari: cariText || null, cari_kod: cariKod || null,
@@ -3989,24 +4019,16 @@ async function sendTeklifToFis(){
   if (plaka) cariText += (cariText ? ' — ' : '') + plaka;
 
   const rows = teklifRows.map(r => ({ ...r }));
-  const ok = await autoSaveTeklifAsFis(cariKod, cariText, rows);
-  if (ok){
-    switchSide('fis');
-    switchFisSub('gecmis');
-  }
+  openOdemeSekliModal(cariKod, cariText, rows);
 }
 
-// Teklif Geçmişi'ndeki kayıtlı bir teklifi, elle onay istemeden direkt bir
-// fiş olarak kaydeder ve Fiş Geçmişi'ne düşürür.
-async function sendTeklifRecordToFis(rec){
+// Teklif Geçmişi'ndeki kayıtlı bir teklifi, ödeme şekli sorulduktan sonra
+// direkt bir fiş olarak kaydeder ve Fiş Geçmişi'ne düşürür.
+function sendTeklifRecordToFis(rec){
   let cariText = rec.cari_adi || '';
   if (rec.plaka) cariText += (cariText ? ' — ' : '') + rec.plaka;
   const rows = (rec.urunler || []).map(r => ({ ...r }));
-  const ok = await autoSaveTeklifAsFis(rec.cari_kod || '', cariText, rows);
-  if (ok){
-    switchSide('fis');
-    switchFisSub('gecmis');
-  }
+  openOdemeSekliModal(rec.cari_kod || '', cariText, rows);
 }
 
 /* ============================================================
