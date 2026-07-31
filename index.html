@@ -3722,7 +3722,34 @@ async function saveTeklif(){
 }
 
 // Ekrandaki (henüz kaydedilmemiş olabilecek) teklifi Fiş ekranına aktarır.
-function sendTeklifToFis(){
+// Teklif satırlarını doğrudan (elle onay istemeden) bir fiş olarak Supabase'e kaydeder.
+async function autoSaveTeklifAsFis(cariKod, cariText, rows){
+  if (!rows.length){ toast('Teklifte ürün yok', true); return false; }
+  const t = computeRowsTotals(rows);
+  const fis_no = await getNextFisNo();
+  try{
+    const { error } = await sb.from('fisler').insert({
+      fis_no, cari: cariText || null, cari_kod: cariKod || null,
+      urunler: rows,
+      ara_toplam: t.araToplam, kdv_toplam: t.kdvToplam, genel_toplam: t.genelToplam,
+      olusturan: currentUser
+    });
+    if (error) throw error;
+    if (cariText || cariKod) saveCariIfNew(cariText, cariKod);
+    for (const row of rows){
+      if (row.kod || row.ad) saveUrunIfNew(row.kod, row.ad, row.fiyat, row.oem);
+    }
+    toast(`Teklif otomatik fişe dönüştürüldü ✓ (${fis_no})`);
+    return true;
+  } catch(err){
+    toast('Fişe dönüştürme hatası: ' + err.message, true);
+    return false;
+  }
+}
+
+// Ekrandaki (henüz kaydedilmemiş olabilecek) teklifi, elle onay istemeden
+// direkt bir fiş olarak kaydeder ve Fiş Geçmişi'ne düşürür.
+async function sendTeklifToFis(){
   if (!teklifRows.length){ toast('Teklifte ürün yok', true); return; }
   const cariAdi = document.getElementById('teklifCariAdi').value.trim();
   const cariKod = document.getElementById('teklifCariKod').value.trim();
@@ -3730,27 +3757,25 @@ function sendTeklifToFis(){
   let cariText = cariAdi || '';
   if (plaka) cariText += (cariText ? ' — ' : '') + plaka;
 
-  fisRows = teklifRows.map(r => ({ ...r, _id: Math.random().toString(36).slice(2) }));
-  switchSide('fis');
-  switchFisSub('yeni');
-  document.getElementById('fisCariKod').value = cariKod;
-  document.getElementById('fisCari').value = cariText;
-  renderFisRows();
-  toast('Teklif Fiş ekranına aktarıldı — kontrol edip kaydet ✓');
+  const rows = teklifRows.map(r => ({ ...r }));
+  const ok = await autoSaveTeklifAsFis(cariKod, cariText, rows);
+  if (ok){
+    switchSide('fis');
+    switchFisSub('gecmis');
+  }
 }
 
-// Teklif Geçmişi'ndeki kayıtlı bir teklifi Fiş ekranına aktarır.
-function sendTeklifRecordToFis(rec){
+// Teklif Geçmişi'ndeki kayıtlı bir teklifi, elle onay istemeden direkt bir
+// fiş olarak kaydeder ve Fiş Geçmişi'ne düşürür.
+async function sendTeklifRecordToFis(rec){
   let cariText = rec.cari_adi || '';
   if (rec.plaka) cariText += (cariText ? ' — ' : '') + rec.plaka;
-
-  fisRows = (rec.urunler || []).map(r => ({ ...r, _id: Math.random().toString(36).slice(2) }));
-  switchSide('fis');
-  switchFisSub('yeni');
-  document.getElementById('fisCariKod').value = rec.cari_kod || '';
-  document.getElementById('fisCari').value = cariText;
-  renderFisRows();
-  toast('Teklif Fiş ekranına aktarıldı — kontrol edip kaydet ✓');
+  const rows = (rec.urunler || []).map(r => ({ ...r }));
+  const ok = await autoSaveTeklifAsFis(rec.cari_kod || '', cariText, rows);
+  if (ok){
+    switchSide('fis');
+    switchFisSub('gecmis');
+  }
 }
 
 /* ============================================================
