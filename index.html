@@ -918,7 +918,7 @@
       <h3>Cari Hesap Bakiyeleri</h3>
       <p style="font-size:12.5px;color:var(--ink-dim);margin:0 0 12px;">
         Veresiye satılan fişlerin borç bakiyesi burada birikir. Bir cariye tıklayıp ödeme alabilirsin —
-        alınan ödeme hem buradan düşer hem de bugünün Föy'üne tahsilat olarak otomatik işlenir.
+        bu tamamen Föy'den bağımsız bir takip: alınan ödeme sadece buradaki bakiyeden düşer, Föy'e (kasa hareketlerine) hiç işlenmez.
       </p>
       <div id="cariHesapListe"><div class="empty">Yükleniyor…</div></div>
     </div>
@@ -927,8 +927,8 @@
       <div class="toolbar" style="margin-bottom:14px;">
         <label>Tutar</label>
         <input type="number" step="0.01" id="cariOdemeTutar" style="width:130px;">
-        <label>Ödeme Şekli</label>
-        <select id="cariOdemeSekli" style="width:180px;"></select>
+        <label>Ödeme Şekli (bilgi amaçlı — Föy'e işlenmez)</label>
+        <select id="cariOdemeSekli" style="width:220px;"></select>
         <button class="btn" onclick="cariHesapOdemeAl()">Ödeme Al</button>
         <div class="spacer"></div>
         <button class="btn ghost" onclick="closeCariHesapDetay()">Kapat</button>
@@ -1948,15 +1948,16 @@ async function cariHesapOdemeAl(){
   const tutar = Number(document.getElementById('cariOdemeTutar').value) || 0;
   if (tutar <= 0){ toast('Geçerli bir tutar gir', true); return; }
   const odemeSekli = document.getElementById('cariOdemeSekli').value;
+  const method = findMethod('tahsilat', odemeSekli);
+  const odemeLabel = method ? method.label : odemeSekli;
   try{
+    // Not: Cari Hesap, Föy'den tamamen bağımsız çalışır — bu ödeme SADECE
+    // cari hesap bakiyesinden düşer, Föy'e (kasa hareketlerine) hiç dokunmaz.
     const { error } = await sb.from('cari_hesap_hareketleri').insert({
       cari_kod: currentCariHesapKod || null, cari_ad: currentCariHesapAd || null,
-      tip: 'tahsilat', tutar, aciklama: 'Veresiye ödemesi', olusturan: currentUser
+      tip: 'tahsilat', tutar, aciklama: `Veresiye ödemesi (${odemeLabel})`, olusturan: currentUser
     });
     if (error) throw error;
-
-    // Alınan ödeme gerçek para olarak kasaya girdiği için bugünün föyüne de işlenir.
-    await routeToFoy('tahsilat', odemeSekli, currentCariHesapKod, currentCariHesapAd, tutar);
 
     toast('Ödeme alındı ✓');
     document.getElementById('cariOdemeTutar').value = '';
