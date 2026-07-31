@@ -1592,6 +1592,7 @@ function toggleMethodRow(tip, key){
 function entryTipTotal(tip){
   let total = 0;
   for (const m of SECTIONS[tip].methods) total += sumRows(tip, m.key);
+  if (tip === 'odeme') total += computeSummary().bayiyeAktarilanToplam;
   return total;
 }
 
