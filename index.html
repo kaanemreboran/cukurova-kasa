@@ -1648,7 +1648,11 @@ function renderFoy(){
 }
 
 function renderMethodRow(tip, method){
-  const total = sumRows(tip, method.key);
+  // Ödeme → Mail Order için: Satış/Tahsilat tarafında "Bayiye Direkt" işaretlenen
+  // tutarların toplamı burada gerçek, görünür (ama düzenlenemez) bir satır olarak
+  // gösterilir ve toplam rakamına da dahil edilir — çift taraflı muhasebe gibi.
+  const extraAuto = (tip === 'odeme' && method.key === 'mailorder') ? computeSummary().bayiyeAktarilanToplam : 0;
+  const total = sumRows(tip, method.key) + extraAuto;
   const open = isMethodOpen(tip, method.key);
 
   const rowEl = document.createElement('div');
@@ -1668,14 +1672,14 @@ function renderMethodRow(tip, method){
   head.onclick = () => toggleMethodRow(tip, method.key);
   rowEl.appendChild(head);
 
-  const body = buildMethodBody(tip, method);
+  const body = buildMethodBody(tip, method, extraAuto);
   body.classList.toggle('hidden', !open);
   rowEl.appendChild(body);
 
   return rowEl;
 }
 
-function buildMethodBody(tip, method){
+function buildMethodBody(tip, method, extraAuto){
   const cfg = SECTIONS[tip];
   const rows = state[tip][method.key];
   const showKod = !!cfg.kodLabel;
@@ -1693,7 +1697,9 @@ function buildMethodBody(tip, method){
     body.appendChild(note);
   }
 
-  if (rows.length){
+  const isOdemeMailorderAuto = (tip === 'odeme' && method.key === 'mailorder');
+
+  if (rows.length || isOdemeMailorderAuto){
     const table = document.createElement('table');
     table.innerHTML = `<thead><tr>
       ${showKod ? `<th style="width:18%">${cfg.kodLabel}</th>` : ''}
@@ -1720,6 +1726,19 @@ function buildMethodBody(tip, method){
       `;
       tbody.appendChild(tr);
     });
+
+    if (isOdemeMailorderAuto){
+      const autoTr = document.createElement('tr');
+      autoTr.className = 'row-line';
+      autoTr.style.cssText = 'opacity:.75;font-style:italic;';
+      autoTr.innerHTML = `
+        <td colspan="2" style="color:var(--ink-dim);">🔄 Bayiye Direkt (Satış/Tahsilat'tan otomatik — düzenlenemez)</td>
+        <td class="tutar-col"><span id="odeme-mailorder-auto-tutar" style="font-variant-numeric:tabular-nums;">${fmt(extraAuto || 0)}</span></td>
+        <td colspan="3"></td>
+      `;
+      tbody.appendChild(autoTr);
+    }
+
     table.appendChild(tbody);
     body.appendChild(table);
   }
@@ -2375,6 +2394,9 @@ function updateCell(tip, key, idx, field, value){
 function updateCellBool(tip, key, idx, field, checked){
   state[tip][key][idx][field] = checked;
   renderSummarySoft();
+  if (field === 'bayiye_direkt' && (tip === 'satis' || tip === 'tahsilat') && key === 'mailorder'){
+    refreshOdemeMailorderAutoDisplay();
+  }
 }
 function updateCardTotal(tip, key){
   const total = sumRows(tip, key);
@@ -2382,6 +2404,27 @@ function updateCardTotal(tip, key){
   if (el){ el.textContent = fmt(total); el.classList.toggle('has-value', !!total); }
   const tEl = document.getElementById(`entry-total-${tip}`);
   if (tEl) tEl.textContent = fmt(entryTipTotal(tip));
+
+  // Satış/Tahsilat'ın Mail Order'ındaki "Bayiye Direkt" tutarı değiştiyse,
+  // Ödeme → Mail Order'daki otomatik satırı ve toplamını da canlı güncelle.
+  if ((tip === 'satis' || tip === 'tahsilat') && key === 'mailorder'){
+    refreshOdemeMailorderAutoDisplay();
+  }
+}
+
+function refreshOdemeMailorderAutoDisplay(){
+  const r = computeSummary();
+  const extraAuto = r.bayiyeAktarilanToplam || 0;
+  const autoTutarEl = document.getElementById('odeme-mailorder-auto-tutar');
+  if (autoTutarEl) autoTutarEl.textContent = fmt(extraAuto);
+  const headerEl = document.getElementById('method-total-odeme-mailorder');
+  if (headerEl){
+    const total = sumRows('odeme', 'mailorder') + extraAuto;
+    headerEl.textContent = fmt(total);
+    headerEl.classList.toggle('has-value', !!total);
+  }
+  const entryTotalEl = document.getElementById('entry-total-odeme');
+  if (entryTotalEl) entryTotalEl.textContent = fmt(entryTipTotal('odeme'));
 }
 
 // Ödeme yöntemine göre renkli ayırt edici nokta — Nakit/Kart/Havale/Mail Order/Masraf görsel olarak ayrılsın.
