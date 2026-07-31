@@ -4097,19 +4097,15 @@ async function sendTeklifToFis(){
   if (!teklifRows.length){ toast('Teklifte ürün yok', true); return; }
   const cariAdi = document.getElementById('teklifCariAdi').value.trim();
   const cariKod = document.getElementById('teklifCariKod').value.trim();
-  const plaka = document.getElementById('teklifPlaka').value.trim();
-  let cariText = cariAdi || '';
-  if (plaka) cariText += (cariText ? ' — ' : '') + plaka;
 
   const rows = teklifRows.map(r => ({ ...r }));
-  openOdemeSekliModal(cariKod, cariText, rows);
+  openOdemeSekliModal(cariKod, cariAdi, rows);
 }
 
 // Teklif Geçmişi'ndeki kayıtlı bir teklifi, ödeme şekli sorulduktan sonra
 // direkt bir fiş olarak kaydeder ve Fiş Geçmişi'ne düşürür.
 function sendTeklifRecordToFis(rec){
-  let cariText = rec.cari_adi || '';
-  if (rec.plaka) cariText += (cariText ? ' — ' : '') + rec.plaka;
+  const cariText = rec.cari_adi || '';
   const rows = (rec.urunler || []).map(r => ({ ...r }));
   openOdemeSekliModal(rec.cari_kod || '', cariText, rows);
 }
