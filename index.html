@@ -3023,8 +3023,12 @@ function tryAutoFillUrun(row, value, matchField){
   const val = (value || '').trim();
   if (!val) return null;
   const norm = (s) => (s || '').trim().toLocaleLowerCase('tr-TR');
-  const match = urunListe.find(u => norm(u[matchField]) === norm(val));
-  if (!match) return null;
+  const matches = urunListe.filter(u => norm(u[matchField]) === norm(val));
+  // Aynı OEM/kod birden fazla ürüne (farklı marka/model) ait olabilir — bu durumda
+  // hangisinin doğru olduğunu bilemeyiz, yanlış birini otomatik yapıştırmak yerine
+  // kullanıcının aşağı açılan listeden birini seçmesini bekleriz.
+  if (matches.length !== 1) return null;
+  const match = matches[0];
   if (match.fiyat) row.fiyat = match.fiyat;
   if (matchField === 'oem' && match.kod) row.kod = match.kod;
   return match;
@@ -4000,13 +4004,51 @@ function renderTeklifTotalsOnly(){
   set('teklifGenelToplam2', t.genelToplam);
 }
 function showTeklifUrunDropdown(idx, field, query){
+  if (field === 'oem'){ showTeklifOemDropdown(idx, query); return; }
   let source;
   if (field === 'kod') source = [...new Set(urunListe.map(u => u.kod).filter(Boolean))];
-  else if (field === 'oem') source = [...new Set(urunListe.map(u => u.oem).filter(Boolean))];
   else source = [...new Set(urunListe.map(u => u.ad).filter(Boolean))];
   showAutocompleteDropdown(`teklif-${field}-${idx}`, `teklif-${field}-dropdown-${idx}`, source, query, (value) => {
     updateTeklifCell(idx, field, value);
   }, 3);
+}
+
+// OEM alanı için özel dropdown: aynı OEM numarası birden fazla ürüne (farklı
+// marka/kod) ait olabileceğinden, her seçenek "OEM · Kod · Marka · Ad" olarak
+// ayrı ayrı listelenir — seçilen kayıttan kod/fiyat da doğrudan uygulanır.
+function showTeklifOemDropdown(idx, query){
+  const input = document.getElementById(`teklif-oem-${idx}`);
+  const dropdown = document.getElementById(`teklif-oem-dropdown-${idx}`);
+  if (!input || !dropdown) return;
+  const q = (query || '').toLocaleLowerCase('tr-TR');
+  if (q.length < 3){ dropdown.classList.add('hidden'); dropdown.innerHTML = ''; return; }
+  const matches = urunListe
+    .filter((u) => u.oem && u.oem.toLocaleLowerCase('tr-TR').includes(q))
+    .slice(0, 50);
+  if (!matches.length){ dropdown.classList.add('hidden'); dropdown.innerHTML = ''; return; }
+  dropdown.innerHTML = matches.map((u, i) => {
+    const detay = [u.kod, u.marka, u.ad].filter(Boolean).join(' · ');
+    return `<div class="autocomplete-item" data-idx="${i}">${escapeAttr(u.oem)}${detay ? ' — ' + escapeAttr(detay) : ''}</div>`;
+  }).join('');
+  dropdown.onmousedown = (e) => {
+    const item = e.target.closest('.autocomplete-item');
+    if (!item) return;
+    e.preventDefault();
+    const chosen = matches[Number(item.dataset.idx)];
+    const row = teklifRows[idx];
+    row.oem = chosen.oem || '';
+    if (chosen.kod) row.kod = chosen.kod;
+    if (chosen.fiyat) row.fiyat = chosen.fiyat;
+    dropdown.classList.add('hidden');
+    dropdown.innerHTML = '';
+    renderTeklifRows();
+  };
+  const rect = input.getBoundingClientRect();
+  dropdown.style.position = 'fixed';
+  dropdown.style.left = rect.left + 'px';
+  dropdown.style.top = (rect.bottom + 3) + 'px';
+  dropdown.style.width = Math.max(rect.width, 260) + 'px';
+  dropdown.classList.remove('hidden');
 }
 
 function renderTeklifRows(){
